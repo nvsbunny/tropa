@@ -89,9 +89,12 @@ val fetchCore by tasks.registering {
     group = "build"
     description = "Скачивает ядро Xray, его geo-файлы и списки заблокированных сайтов"
     val jniDir = layout.projectDirectory.dir("src/main/jniLibs").asFile
+    // Ядро mihomo — только в сборке «mihomo» (её исходники лежат в src/mihomo).
+    val mihomoJniDir = layout.projectDirectory.dir("src/mihomo/jniLibs").asFile
     val assetsDir = layout.projectDirectory.dir("src/main/assets").asFile
     val cacheDir = rootProject.layout.projectDirectory.dir(".core-cache").asFile
     outputs.dir(jniDir)
+    outputs.dir(mihomoJniDir)
     outputs.dir(assetsDir)
     doLast {
         xrayAssets.forEach { (abi, pair) ->
@@ -126,20 +129,22 @@ val fetchCore by tasks.registering {
                 }
             }
         }
-        // Необязательное второе ядро mihomo («Для опытных»): собирается tools/build-mihomo.sh.
-        // Нет файлов — приложение собирается только с Xray, а выбор ядра в настройках прячется.
+        // Второе ядро mihomo — только для сборки «mihomo»: собирается tools/build-mihomo.sh.
+        // Нет файлов — сборка «mihomo» выйдет без него (tropaRelease такую не выпустит).
         val sums = File(cacheDir, "SHA256SUMS").takeIf { it.exists() }?.readLines()
             ?.mapNotNull { Regex("^([0-9a-f]{64})\\s+\\*?(\\S+)$").find(it.trim())?.destructured }
             ?.associate { (hash, file) -> file to hash }.orEmpty()
         mapOf("arm64-v8a" to "mihomo-android-arm64", "x86_64" to "mihomo-android-amd64").forEach { (abi, name) ->
             val src = File(cacheDir, name)
-            val target = File(jniDir, "$abi/libmihomo.so")
+            File(jniDir, "$abi/libmihomo.so").delete() // раньше лежало в общей папке — в сборку «xray» не берём
+            val target = File(mihomoJniDir, "$abi/libmihomo.so")
             val expected = sums[name]
             if (expected == null || !src.exists() || sha256(src) != expected) {
                 target.delete()
                 logger.lifecycle("Tropa: ядра mihomo для $abi нет — только Xray")
                 return@forEach
             }
+            target.parentFile.mkdirs()
             if (!target.exists() || target.length() != src.length()) src.copyTo(target, overwrite = true)
         }
         File(assetsDir, "xray/geosite-tags.txt").writeText(geoTags(File(assetsDir, "xray/geosite.dat")).joinToString("\n"))
@@ -171,6 +176,19 @@ android {
         versionName = providers.gradleProperty("tropa.versionName").get()
         // Откуда Тропа узнаёт о новых версиях. Для проверки можно подменить: -Ptropa.updateUrl=…
         buildConfigField("String", "UPDATE_URL", "\"" + providers.gradleProperty("tropa.updateUrl").get() + "\"")
+    }
+
+    // Две сборки из одного кода: «xray» — для всех, «mihomo» — плюс второе ядро «для опытных».
+    // Пакет и ключ одни: одну можно поставить поверх другой, настройки сохранятся.
+    flavorDimensions += "core"
+    productFlavors {
+        create("xray") {
+            dimension = "core"
+            isDefault = true
+        }
+        create("mihomo") {
+            dimension = "core"
+        }
     }
 
     splits {
@@ -247,7 +265,7 @@ tasks.register("tropaRelease") {
     description = "Собирает релиз и подписывает его ключом Тропы"
     dependsOn("assembleRelease")
     val signing = rootProject.file("signing")
-    val apkDir = layout.buildDirectory.dir("outputs/apk/release")
+    val apkDir = layout.buildDirectory.dir("outputs/apk")
     val outDir = layout.buildDirectory.dir("outputs/tropa")
     val sdk = androidComponents.sdkComponents.sdkDirectory
     val version = android.defaultConfig.versionName
@@ -256,9 +274,16 @@ tasks.register("tropaRelease") {
         val buildTools = File(sdk.get().asFile, "build-tools").listFiles()!!.filter { File(it, "lib/apksigner.jar").exists() }.maxBy { it.name }
         val javaBin = File(System.getProperty("java.home"), "bin/java").path
         val out = outDir.get().asFile.apply { deleteRecursively(); mkdirs() }
-        apkDir.get().asFile.listFiles { f -> f.name.endsWith("-release-unsigned.apk") }!!.forEach { apk ->
-            val abi = apk.name.removePrefix("app-").removeSuffix("-release-unsigned.apk")
-            val target = File(out, "Tropa-$version-$abi.apk")
+        // Только свежие сборки двух вариантов: outputs/apk/<xray|mihomo>/release/app-<вариант>-<abi>-release-unsigned.apk.
+        // Итог: Tropa-<версия>-<abi>.apk и Tropa-<версия>-<abi>-mihomo.apk.
+        listOf("xray", "mihomo").flatMap { flavor ->
+            File(apkDir.get().asFile, "$flavor/release").listFiles { f -> f.name.endsWith("-release-unsigned.apk") }.orEmpty().map { flavor to it }
+        }.forEach { (flavor, apk) ->
+            val abi = apk.name.removePrefix("app-$flavor-").removeSuffix("-release-unsigned.apk")
+            if (flavor == "mihomo" && ZipFile(apk).use { z -> z.getEntry("lib/$abi/libmihomo.so") == null }) {
+                throw GradleException("В сборке mihomo для $abi нет ядра: сначала tools/build-mihomo.sh")
+            }
+            val target = File(out, "Tropa-$version-$abi" + (if (flavor == "mihomo") "-mihomo" else "") + ".apk")
             fun run(vararg args: String) {
                 val p = ProcessBuilder(javaBin, "--enable-native-access=ALL-UNNAMED", "-jar", File(buildTools, "lib/apksigner.jar").path, *args)
                     .redirectErrorStream(true).apply { environment()["TROPA_KS_PASS"] = props.getProperty("storePassword") }.start()

@@ -6,6 +6,7 @@ build/
 local.properties
 # Скачивается при сборке (задача fetchCore):
 app/src/main/jniLibs/
+app/src/mihomo/jniLibs/
 app/src/main/assets/xray/
 app/src/main/assets/rules/
 # Личные заметки и отчёты еженедельной проверки — только на этом компьютере:

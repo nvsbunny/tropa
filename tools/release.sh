@@ -28,8 +28,10 @@ out=app/build/outputs/tropa
 python -I - "$out" "$code" "$name" "$notes" "$base" <<'EOF'
 import hashlib, json, os, sys
 out, code, name, notes, base = sys.argv[1:]
-# Имена для людей: телефону — «phone», эмулятору — «emulator». Тропа выбирает файл по ключу ABI в update.json.
-public = {'arm64-v8a': f'Tropa-{name}-phone.apk', 'x86_64': f'Tropa-{name}-emulator-x86_64.apk'}
+# Имена для людей: телефону — «phone», эмулятору — «emulator», сборке со вторым ядром — «-mihomo».
+# Тропа выбирает файл по ключу в update.json: ABI, а у сборки «mihomo» — ABI-mihomo.
+public = {'arm64-v8a': f'Tropa-{name}-phone.apk', 'x86_64': f'Tropa-{name}-emulator-x86_64.apk',
+          'arm64-v8a-mihomo': f'Tropa-{name}-phone-mihomo.apk', 'x86_64-mihomo': f'Tropa-{name}-emulator-x86_64-mihomo.apk'}
 apks = {}
 for f in sorted(os.listdir(out)):
     if not f.endswith('.apk') or not f.startswith(f'Tropa-{name}-'):

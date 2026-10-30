@@ -104,7 +104,7 @@ def main(tag):
 
         gradlew = os.path.join(ROOT, 'gradlew.bat' if os.name == 'nt' else 'gradlew')
         shutil.rmtree(os.path.join(ROOT, 'app', 'build', 'core-check'), ignore_errors=True)
-        run([gradlew, 'testDebugUnitTest', 'tropaRelease', '--console=plain', '-q'])
+        run([gradlew, 'testXrayDebugUnitTest', 'tropaRelease', '--console=plain', '-q'])
         xray_check(tag)
         print(f'Готово: Тропа {new_name} (versionCode {code}) с Xray {tag}. APK — app/build/outputs/tropa/')
     except Exception as e:

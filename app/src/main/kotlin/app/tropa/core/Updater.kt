@@ -279,11 +279,15 @@ object Updater {
 
     // ---------- описание версии ----------
 
-    /** Сборка под этот телефон: первая архитектура из поддерживаемых, для которой есть APK. */
+    /**
+     * Сборка под этот телефон: первая архитектура из поддерживаемых, для которой есть APK, —
+     * и та же сборка, что стоит сейчас («xray» или «mihomo», у второй ключ с «-mihomo»).
+     */
     private fun parse(o: JSONObject): Release? {
         val apks = o.optJSONObject("apks") ?: return null
-        val abi = Build.SUPPORTED_ABIS.firstOrNull { apks.has(it) } ?: return null
-        val a = apks.getJSONObject(abi)
+        val suffix = if (BuildConfig.FLAVOR == "mihomo") "-mihomo" else ""
+        val abi = Build.SUPPORTED_ABIS.firstOrNull { apks.has(it + suffix) } ?: return null
+        val a = apks.getJSONObject(abi + suffix)
         return Release(o.getInt("versionCode"), o.getString("versionName"), o.optString("notes"),
             a.getString("url"), a.getString("sha256"), a.optLong("size"))
     }

@@ -4,13 +4,19 @@ Android-клиент для VPN-подписок: VLESS (Reality, Vision, XHTTP,
 Hysteria2; через второе ядро mihomo — ещё TUIC. Понимает подписки, которые провайдеры выдают для Happ и INCY
 (Xray JSON и профили маршрутизации), Clash/mihomo, v2rayNG (base64) и отдельные ссылки.
 
-Готовые сборки — в [Releases](https://github.com/nvsbunny/tropa/releases/latest): `Tropa-<версия>-phone.apk` для телефона,
-`Tropa-<версия>-emulator-x86_64.apk` — для эмуляторов. Оттуда же Тропа обновляется сама.
+Готовые сборки — в [Releases](https://github.com/nvsbunny/tropa/releases/latest), оттуда же Тропа обновляется сама:
+- `Tropa-<версия>-phone.apk` — Тропа для телефона, ядро Xray;
+- `Tropa-<версия>-phone-mihomo.apk` — то же плюс второе ядро mihomo «для опытных»;
+- `…-emulator-x86_64…` — то же для эмуляторов Android на компьютере.
+
+Обе сборки — один пакет и один ключ: одну можно поставить поверх другой, настройки сохранятся.
+Каждая обновляется своей же сборкой.
 Лицензия — [GPL-3.0](LICENSE).
 
 ## Что внутри
 - **Ядро** — официальный [Xray-core](https://github.com/XTLS/Xray-core) отдельным процессом. Конфиги провайдера
-  в формате Xray JSON уходят ядру как есть, вместе с цепочками (dialerProxy). Для опытных — [mihomo](https://github.com/MetaCubeX/mihomo).
+  в формате Xray JSON уходят ядру как есть, вместе с цепочками (dialerProxy). В сборке «mihomo» — ещё
+  [mihomo](https://github.com/MetaCubeX/mihomo) на выбор (Настройки → Для опытных).
 - **Подключение без root** — `VpnService` + TUN-вход Xray (дескриптор передаётся ядру как fd 3). Приложение само
   исключено из VPN, поэтому трафик ядра к серверам не зацикливается.
 - **Root-режим** (Magisk, KernelSU) — без VPN: Xray от root с входом TPROXY, правила iptables в таблице mangle,
@@ -38,13 +44,14 @@ Hysteria2; через второе ядро mihomo — ещё TUIC. Понима
 версии и SHA-256 закреплены в [`app/build.gradle.kts`](app/build.gradle.kts)).
 
 ```
-./gradlew testDebugUnitTest   # тесты: разбор подписок, конфиги ядер, выбор сервера, передача на ТВ
-./gradlew assembleDebug       # APK: app/build/outputs/apk/debug/
+./gradlew testXrayDebugUnitTest   # тесты: разбор подписок, конфиги ядер, выбор сервера, передача на ТВ
+./gradlew assembleXrayDebug       # Тропа на Xray: app/build/outputs/apk/xray/debug/
+./gradlew assembleMihomoDebug     # с ядром mihomo (сначала tools/build-mihomo.sh): …/apk/mihomo/debug/
 ```
 
-Второе ядро mihomo необязательно: его собирает [`tools/build-mihomo.sh`](tools/build-mihomo.sh) с правкой
-[`tools/mihomo-android-nonroot.patch`](tools/mihomo-android-nonroot.patch) (без неё Android-сборка mihomo без root
-не поднимает TUN). Если файла ядра нет, Тропа собирается только с Xray.
+Ядро для сборки «mihomo» собирает [`tools/build-mihomo.sh`](tools/build-mihomo.sh) с правкой
+[`tools/mihomo-android-nonroot.patch`](tools/mihomo-android-nonroot.patch): без неё Android-сборка mihomo без root
+не поднимает TUN. Собрав ядро сами, можно сверить SHA-256 с `lib/arm64-v8a/libmihomo.so` из официального APK.
 
 Официальные выпуски подписываются ключом автора (`./gradlew tropaRelease`, ключа в репозитории нет) и выкладываются
 скриптом [`tools/release.sh`](tools/release.sh). Своя сборка подписана другим ключом: поверх официальной
