@@ -203,8 +203,6 @@ object Updater {
 
     private fun install(context: Context, file: File, r: Release) {
         _state.value = State.Installing(r)
-        // Установка перезапускает приложение и рвёт VPN — после неё включим его обратно.
-        prefs(context).edit().putBoolean("restartVpn", CoreState.isOn).apply()
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
@@ -239,21 +237,23 @@ object Updater {
             }
             PackageInstaller.STATUS_SUCCESS -> Unit // приложение перезапустится, дальше — onReplaced
             else -> {
-                prefs(context).edit().putBoolean("restartVpn", false).apply()
                 val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                 _state.value = State.Failed(if (msg.isNullOrBlank()) "Установка отменена" else "Не установилось: $msg", r)
             }
         }
     }
 
-    /** Новая версия встала: убираем скачанный файл и, если VPN был включён, включаем его снова. */
+    /**
+     * Новая версия встала: убираем скачанный файл и, если VPN был включён, включаем его снова.
+     * «Был включён» помнит сам сервис ([TropaVpnService.wantOn]): так не важно, кто и как ставил
+     * обновление — Тропа, Play Защита с подтверждением или вручную.
+     */
     internal fun onReplaced(context: Context) {
         File(context.cacheDir, "update").deleteRecursively()
         context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         val p = prefs(context)
-        val restart = p.getBoolean("restartVpn", false)
-        p.edit().putBoolean("restartVpn", false).remove("release").apply()
-        if (restart && !TropaVpnService.needsPermission(context)) TropaVpnService.start(context)
+        p.edit().remove("release").apply()
+        if (TropaVpnService.wantOn(context) && !TropaVpnService.needsPermission(context)) TropaVpnService.start(context)
     }
 
     private fun notifyAvailable(context: Context, r: Release) {

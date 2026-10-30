@@ -146,6 +146,7 @@ class TropaVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                setWantOn(this, false)
                 stopCore(CoreState.Status.Off)
                 stopSelf()
                 return START_NOT_STICKY
@@ -248,6 +249,7 @@ class TropaVpnService : VpnService() {
                     CoreState.core = core
                     CoreState.plan = plan
                     CoreState.set(CoreState.Status.On(System.currentTimeMillis()))
+                    setWantOn(this@TropaVpnService, true)
                     showConnected()
                     restarts = 0
                     if (rootMode) watchRoot(log) else watchProcess()
@@ -406,6 +408,7 @@ class TropaVpnService : VpnService() {
 
     override fun onRevoke() {
         // Другой VPN забрал туннель или пользователь отключил нас в настройках Android.
+        setWantOn(this, false)
         stopCore(CoreState.Status.Off)
         stopSelf()
     }
@@ -509,6 +512,15 @@ class TropaVpnService : VpnService() {
             ByteArray(24).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
 
         /** Есть ли в этой сборке ядро mihomo (его можно собрать без него). */
+        /**
+         * Хочет ли пользователь, чтобы VPN был включён: да — с момента подключения, нет — после
+         * «Отключить» или если VPN забрал другой. По этому решаем, включать ли VPN после обновления Тропы.
+         */
+        fun wantOn(context: Context) = context.getSharedPreferences("vpn", Context.MODE_PRIVATE).getBoolean("wantOn", false)
+
+        private fun setWantOn(context: Context, on: Boolean) =
+            context.getSharedPreferences("vpn", Context.MODE_PRIVATE).edit().putBoolean("wantOn", on).apply()
+
         /** Нужно ли спросить разрешение на VPN. В root-режиме VPN не используется. */
         fun needsPermission(context: Context): Boolean =
             !(context.applicationContext as TropaApp).store.settings.value.rootMode && VpnService.prepare(context) != null
