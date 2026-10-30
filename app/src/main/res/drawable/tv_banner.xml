@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Баннер в меню Android TV (320×180): развилка маршрута на тёмном фоне. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#152027" android:pathData="M0,0h320v180h-320z" />
+    <path
+        android:strokeColor="#9DB0B8"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:pathData="M110,90 H138" />
+    <path
+        android:strokeColor="#8CC8FF"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:pathData="M138,90 C156,90 156,64 174,64 H210" />
+    <path
+        android:strokeColor="#E5B567"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:pathData="M138,90 C156,90 156,116 174,116 H210" />
+    <path android:fillColor="#ECF1EE" android:pathData="M110,81 a9,9 0 1,0 0.01,0 z" />
+</vector>

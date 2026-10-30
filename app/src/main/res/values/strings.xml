@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Тропа</string>
+    <string name="widget_button_desc">Включить и выключить VPN одним касанием</string>
+    <string name="widget_connection_desc">Статус, страна, сервер и отклик</string>
+    <string name="widget_subs_desc">Сколько дней осталось, трафик и лимит LTE</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- http разрешён: ядро управляется через 127.0.0.1, а часть провайдеров
+     до сих пор раздаёт подписки по http. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -1,0 +1,22 @@
+diff --git a/listener/sing_tun/server.go b/listener/sing_tun/server.go
+index 5415b25..ef4c080 100644
+--- a/listener/sing_tun/server.go
++++ b/listener/sing_tun/server.go
+@@ -480,8 +480,15 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
+ 
+ 	err = l.buildAndroidRules(&tunOptions)
+ 	if err != nil {
+-		err = E.Cause(err, "build android rules")
+-		return
++		// Tropa: an app without root cannot read /data/system/packages.xml.
++		// The package list is only needed for include/exclude-package, so
++		// without those options the TUN works fine and the error is not fatal.
++		if len(options.IncludePackage) > 0 || len(options.ExcludePackage) > 0 {
++			err = E.Cause(err, "build android rules")
++			return
++		}
++		log.Warnln("[TUN] skip android package rules: %v", err)
++		err = nil
+ 	}
+ 	tunIf, err := tunNew(tunOptions)
+ 	if err != nil {
