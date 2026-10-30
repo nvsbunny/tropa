@@ -13,7 +13,7 @@
 set -euo pipefail
 
 notes=${1:-}
-repo=${TROPA_REPO:-nvsbunny/tropa-releases}
+repo=${TROPA_REPO:-nvsbunny/tropa}
 cd "$(dirname "$0")/.."
 
 code=$(sed -n 's/^tropa.versionCode=//p' gradle.properties)

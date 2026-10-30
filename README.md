@@ -4,7 +4,8 @@ Android-клиент для VPN-подписок: VLESS (Reality, Vision, XHTTP,
 Hysteria2; через второе ядро mihomo — ещё TUIC. Понимает подписки, которые провайдеры выдают для Happ и INCY
 (Xray JSON и профили маршрутизации), Clash/mihomo, v2rayNG (base64) и отдельные ссылки.
 
-Готовые сборки и автообновления — в [tropa-releases](https://github.com/nvsbunny/tropa-releases/releases/latest).
+Готовые сборки — в [Releases](https://github.com/nvsbunny/tropa/releases/latest): `Tropa-<версия>-phone.apk` для телефона,
+`Tropa-<версия>-emulator-x86_64.apk` — для эмуляторов. Оттуда же Тропа обновляется сама.
 Лицензия — [GPL-3.0](LICENSE).
 
 ## Что внутри
