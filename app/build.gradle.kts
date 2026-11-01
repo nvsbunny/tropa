@@ -20,10 +20,10 @@ plugins {
  * неизвестную метку (с ней Xray не запустится).
  * Список заблокированного в России и подсети мессенджеров — от itdoginfo/allow-domains.
  */
-val xrayVersion = "v26.10.29"
+val xrayVersion = "v26.10.31"
 val xrayAssets = mapOf(
-    "arm64-v8a" to ("Xray-android-arm64-v8a.zip" to "1be0ea7dc4fd967b7dd784d9d8281aab19da3bfc5d78c2da7dcb7d690e25299f"),
-    "x86_64" to ("Xray-android-amd64.zip" to "7fda59f39c06308c82c3c873590febcfd8acb2db29431eea1459d86408d44618"),
+    "arm64-v8a" to ("Xray-android-arm64-v8a.zip" to "ee7878bb47ce28ff5b068e2d173ba1a9fab20ca1aec94191644919ec08ba5f1d"),
+    "x86_64" to ("Xray-android-amd64.zip" to "077f2f768de2356cea4a32598d333837fe0fa33ab540c4d508d9f17e2eb9e5b4"),
 )
 val itdog = "https://raw.githubusercontent.com/itdoginfo/allow-domains/main"
 val rulesUrls = mapOf("blocked.list" to "$itdog/Russia/inside-raw.lst") +
