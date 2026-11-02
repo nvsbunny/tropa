@@ -75,8 +75,13 @@ class TropaVpnService : VpnService() {
         val store = (application as TropaApp).store
         val fetcher = app.tropa.sub.SubscriptionFetcher(this)
         refreshJob = scope.launch {
+            // Новый выбор по проверке качества ждёт выключенного экрана: не рвём связь посреди звонка.
+            var rebuildWhenIdle = false
+            var first = true
             while (true) {
-                delay(15 * 60_000L)
+                // Первый круг — через минуту после включения: устаревшая проверка обновится сразу.
+                delay(if (first) 60_000L else 15 * 60_000L)
+                first = false
                 val now = System.currentTimeMillis()
                 var changed = false
                 store.subs.value.filter { !it.isLocal && now - it.updatedAt > it.updateIntervalHours * 3_600_000L }.forEach { old ->
@@ -87,19 +92,25 @@ class TropaVpnService : VpnService() {
                         if (fresh.nodes.map { it.id } != old.nodes.map { it.id }) changed = true
                     }.onFailure { e -> store.upsertSub(old.copy(lastError = e.message.orEmpty())) }
                 }
-                // Ночная проверка качества: только на Wi-Fi, на зарядке и с выключенным экраном,
-                // не чаще раза в сутки — днём и от батареи телефон не грузим.
+                // Проверка качества: раз в QUALITY_EVERY_H часов и сразу, если серверы в подписке сменились.
+                // Только на Wi-Fi (трафик) и не на разряженном телефоне. Занимает около минуты.
                 val power = getSystemService(android.os.PowerManager::class.java)
                 val battery = getSystemService(android.os.BatteryManager::class.java)
+                val level = battery.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
                 val q = store.quality.value
-                val api = CoreState.api
-                if (!changed && api != null && !onMobile && battery.isCharging && !power.isInteractive &&
-                    now - q.at > 20 * 3_600_000L
+                if (CoreState.api != null && !onMobile && (battery.isCharging || level >= 30) &&
+                    (changed || now - q.at > QUALITY_EVERY_H * 3_600_000L)
                 ) {
                     val nodes = store.allNodes().map { it.second }.filter { app.tropa.ui.Names.kind(it.name) == app.tropa.ui.Names.Kind.NORMAL }
-                    val results = Quality.run(this@TropaVpnService, nodes)
-                    store.saveQuality(QualityData(System.currentTimeMillis(), results.associate { it.id to QualityInfo(it.delay, it.failed) }, Quality.rank(results)))
-                    changed = store.settings.value.choice == app.tropa.data.ServerChoice.AUTO
+                    val results = runCatching { Quality.run(this@TropaVpnService, nodes) }.getOrDefault(emptyList())
+                    if (results.isNotEmpty()) {
+                        store.saveQuality(QualityData(System.currentTimeMillis(), results.associate { it.id to QualityInfo(it.delay, it.failed) }, Quality.rank(results)))
+                        if (store.settings.value.choice == app.tropa.data.ServerChoice.AUTO) rebuildWhenIdle = true
+                    }
+                }
+                if (rebuildWhenIdle && !power.isInteractive) {
+                    rebuildWhenIdle = false
+                    changed = true
                 }
                 // Списки сайтов и geo-файлы — раз в три дня по Wi-Fi; вступят в силу при следующем подключении.
                 runCatching { Lists.updateIfDue(this@TropaVpnService) }
@@ -499,6 +510,8 @@ class TropaVpnService : VpnService() {
 
     companion object {
         const val MTU = 9000
+        /** Как часто сама повторяется проверка качества (на Wi-Fi, при включённом VPN). */
+        const val QUALITY_EVERY_H = 6
         private const val TUN_FD = 3
         private const val CHANNEL = "vpn"
         private const val NOTIFICATION_ID = 1

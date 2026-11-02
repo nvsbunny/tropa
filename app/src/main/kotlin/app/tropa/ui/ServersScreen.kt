@@ -76,7 +76,7 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
     val dead = regular.filter { delays[it.second.id] == 0 }
     val usedId = activeId ?: settings.manualNodeId.takeIf { settings.choice == ServerChoice.MANUAL }
     val providerSub = subs.firstOrNull { it.id == settings.providerSubId } ?: subs.firstOrNull()
-    val row = RowOpts(delays, usedId, settings.choice != ServerChoice.MANUAL, settings.advanced, c, quality.byId)
+    val row = RowOpts(delays, usedId, settings.choice != ServerChoice.MANUAL, settings.advanced, c, if (quality.fresh) quality.byId else emptyMap())
 
     LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
         item {
@@ -150,7 +150,7 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
                     Text(if (checking) "Проверяем серверы…" else "Проверить качество", style = Type.bodyStrong, color = Palette.vpn)
                     Text(
                         if (quality.at > 0) "Последняя проверка: " + java.text.SimpleDateFormat("d.MM HH:mm", java.util.Locale.forLanguageTag("ru")).format(java.util.Date(quality.at)) +
-                            ". Сама повторяется ночью на зарядке и Wi-Fi."
+                            ". Сама повторяется каждые ${app.tropa.core.TropaVpnService.QUALITY_EVERY_H} часов на Wi-Fi, пока VPN включён."
                         else "Google, YouTube, Telegram, WhatsApp и Claude через каждый сервер. Займёт около минуты.",
                         style = Type.caption, color = Palette.muted,
                     )

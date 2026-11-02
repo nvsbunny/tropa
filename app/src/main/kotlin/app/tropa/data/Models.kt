@@ -52,8 +52,8 @@ data class QualityData(
     /** Очередь серверов от лучшего к худшему. */
     val ranking: List<String> = emptyList(),
 ) {
-    /** Данным больше трёх суток — не опираемся на них, провайдеры меняют серверы. */
-    val fresh get() = ranking.isNotEmpty() && System.currentTimeMillis() - at < 72 * 3_600_000L
+    /** Данным больше суток — не опираемся на них и не показываем: серверы у провайдеров чинятся и ломаются. */
+    val fresh get() = ranking.isNotEmpty() && System.currentTimeMillis() - at < 24 * 3_600_000L
 }
 
 /** Кто выбирает сервер: провайдер (его группа или порядок списка), Тропа по задержке или человек. */
