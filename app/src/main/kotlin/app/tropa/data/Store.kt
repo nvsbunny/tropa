@@ -91,6 +91,8 @@ class Store(context: Context) {
             put("providerSubId", s.providerSubId)
             put("mergeSubs", s.mergeSubs)
             put("manualNodeId", s.manualNodeId)
+            put("country", s.country)
+            put("countrySubId", s.countrySubId)
             put("ipv6", s.ipv6)
             put("ruHintDismissed", s.ruHintDismissed)
             put("advanced", s.advanced)
@@ -144,6 +146,8 @@ class Store(context: Context) {
                 providerSubId = o.optString("providerSubId"),
                 mergeSubs = o.optBoolean("mergeSubs", true),
                 manualNodeId = o.optString("manualNodeId"),
+                country = o.optString("country"),
+                countrySubId = o.optString("countrySubId"),
                 ipv6 = o.optBoolean("ipv6", true),
                 ruHintDismissed = o.optBoolean("ruHintDismissed", false),
                 advanced = o.optBoolean("advanced", false),

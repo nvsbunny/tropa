@@ -12,7 +12,7 @@ object Names {
         while (i < name.length) {
             val cp = name.codePointAt(i)
             val keep = Character.isLetterOrDigit(cp) || Character.isSpaceChar(cp) ||
-                cp in ".,-+()/:|&_'«»".map { it.code }
+                cp in ".,-+()/:|&_'«»@".map { it.code }
             if (keep) sb.appendCodePoint(cp) else sb.append(' ')
             i += Character.charCount(cp)
         }
@@ -34,6 +34,7 @@ object Names {
 
     /** Флаг-эмодзи по ISO-коду страны: «FI» → 🇫🇮. */
     fun flag(code: String?): String {
+        if (code == AI) return "🤖"
         if (code == null || code.length != 2) return ""
         return code.uppercase().map { String(Character.toChars(0x1F1E6 + (it - 'A'))) }.joinToString("")
     }
@@ -119,12 +120,63 @@ object Names {
         return parts.joinToString(", ")
     }
 
-    /** ISO-код страны из флага-эмодзи или из названия страны или города. */
+    /**
+     * ISO-код страны: из флага-эмодзи, из названия страны или города, а если их нет —
+     * из кода в имени («SELFSTEAL NODE se-1 SE TCP» → SE, «lt-2» → LT).
+     */
     fun country(name: String): String? {
         flagEmoji(name)?.let { return it }
+        countryByWord(name)?.let { return it }
+        Regex("(?<![A-Za-z])([A-Z]{2})(?![A-Za-z])").findAll(name).map { alias(it.groupValues[1]) }.firstOrNull { it in countryNames }?.let { return it }
+        return Regex("(?<![A-Za-z])([a-z]{2})-\\d+").find(name)?.groupValues?.get(1)?.uppercase()?.let(::alias)?.takeIf { it in countryNames }
+    }
+
+    /** Провайдеры пишут Великобританию как UK, хотя её код — GB. */
+    private fun alias(code: String) = if (code == "UK") "GB" else code
+
+    /** «AI» у некоторых провайдеров — не Ангилья, а серверы «для нейросетей». */
+    const val AI = "AI"
+
+    private fun countryByWord(name: String): String? {
         val lower = name.lowercase()
         return words.entries.firstOrNull { (word, _) -> Regex("(^|[^\\p{L}])$word").containsMatchIn(lower) }?.value
     }
+
+    /** Страна по-русски: «SE» → «Швеция». */
+    fun countryName(code: String?): String? = code?.let { countryNames[it] }
+
+    /**
+     * Имя сервера для экрана. Технические имена провайдеров («SELFSTEAL NODE se-1 SE TCP») —
+     * по-человечески: «Швеция se-1 TCP». «Self-steal» — это вид маскировки Reality (под свой же сайт),
+     * обычному человеку он ни о чём не говорит. Если страна понятна только по коду, пишем её словом.
+     */
+    fun serverName(name: String): String {
+        var s = clean(name).replace(Regex("(?i)\\bself-?steal(\\s+node)?\\b"), " ")
+        val code = country(name)
+        if (code != null && countryByWord(s) == null && flagEmoji(name) == null) {
+            s = s.replace(Regex("(?<![A-Za-z])$code(?![A-Za-z])"), " ")
+            if (code == "GB") s = s.replace(Regex("(?<![A-Za-z])UK(?![A-Za-z])"), " ")
+            countryName(code)?.let { s = "$it $s" }
+        }
+        return s.replace(Regex("\\s+"), " ").trim(' ', '-', '|', ',', ':').ifBlank { clean(name) }
+    }
+
+    private val countryNames: Map<String, String> = mapOf(
+        "FI" to "Финляндия", "SE" to "Швеция", "NL" to "Нидерланды", "DE" to "Германия", "LV" to "Латвия",
+        "LT" to "Литва", "EE" to "Эстония", "PL" to "Польша", "FR" to "Франция", "GB" to "Великобритания",
+        "US" to "США", "CH" to "Швейцария", "AT" to "Австрия", "CZ" to "Чехия", "NO" to "Норвегия",
+        "DK" to "Дания", "IT" to "Италия", "ES" to "Испания", "TR" to "Турция", "KZ" to "Казахстан",
+        "JP" to "Япония", "SG" to "Сингапур", "HK" to "Гонконг", "AE" to "ОАЭ", "AM" to "Армения",
+        "GE" to "Грузия", "RS" to "Сербия", "RU" to "Россия", "CA" to "Канада", "PH" to "Филиппины",
+        "BG" to "Болгария", "RO" to "Румыния", "HU" to "Венгрия", "PT" to "Португалия", "IE" to "Ирландия",
+        "BE" to "Бельгия", "MD" to "Молдова", "IL" to "Израиль", "IN" to "Индия", "KR" to "Корея",
+        "AU" to "Австралия", "BR" to "Бразилия", "AR" to "Аргентина", "MX" to "Мексика", "TH" to "Таиланд",
+        "VN" to "Вьетнам", "ID" to "Индонезия", "MY" to "Малайзия", "UZ" to "Узбекистан", "KG" to "Киргизия",
+        "AZ" to "Азербайджан", "GR" to "Греция", "IS" to "Исландия", "LU" to "Люксембург", "CY" to "Кипр",
+        "SK" to "Словакия", "SI" to "Словения", "HR" to "Хорватия", "UA" to "Украина", "BY" to "Беларусь",
+        AI to "Для нейросетей", "TW" to "Тайвань", "NZ" to "Новая Зеландия", "ZA" to "ЮАР", "CL" to "Чили", "CO" to "Колумбия",
+        "SA" to "Саудовская Аравия", "QA" to "Катар", "EG" to "Египет", "MN" to "Монголия",
+    )
 
     /**
      * Последний флаг в имени: в «🇷🇺 Мост -> 🇸🇪 Residental» вход в России,

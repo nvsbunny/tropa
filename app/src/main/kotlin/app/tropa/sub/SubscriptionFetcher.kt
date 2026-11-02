@@ -23,7 +23,7 @@ class SubscriptionFetcher(private val context: Context) {
 
     private val agents = listOf(
         "clash.meta/1.19.33",
-        "Happ/3.10.0",
+        HAPP,
         "v2rayNG/1.10.20",
     )
 
@@ -36,7 +36,7 @@ class SubscriptionFetcher(private val context: Context) {
         val base = clean.trimEnd('/')
         val json = if (base.endsWith("/json") || '?' in base) null else "$base/json"
         return buildList {
-            if (json != null) add(json to "Happ/3.10.0")
+            if (json != null) add(json to HAPP)
             agents.forEach { add(clean to it) }
         }
     }
@@ -45,11 +45,15 @@ class SubscriptionFetcher(private val context: Context) {
         class Ok(val resp: Response, val parsed: SubscriptionParser.Result) : Attempt
         class Denied(val hint: String) : Attempt
         class Empty(val hint: String) : Attempt
+        /** Вместо серверов одни заглушки («приложение не поддерживается», «превышен лимит»). */
+        class Stub(val hint: String) : Attempt
     }
 
     /**
      * HWID отправляем, только если провайдер без него не пустил: лишнее устройство
      * в его лимите никому не нужно, а многим провайдерам HWID не нужен.
+     * «Не пустил» — это и отказ (401/403), и заглушки вместо серверов: так некоторые провайдеры
+     * молча отвечают всем, кто пришёл без HWID, хоть с User-Agent Happ.
      */
     fun fetch(url: String, existing: Subscription?): Subscription {
         val id = existing?.id ?: UUID.randomUUID().toString()
@@ -61,6 +65,7 @@ class SubscriptionFetcher(private val context: Context) {
                 when (val a = tryOne(target, agent, withHwid, id, isMain = target == url.trim())) {
                     is Attempt.Ok -> return build(url, id, existing, a.resp, a.parsed, agent).copy(sendHwid = withHwid)
                     is Attempt.Denied -> { denied = true; hint = a.hint }
+                    is Attempt.Stub -> { denied = true; hint = a.hint }
                     is Attempt.Empty -> if (a.hint.isNotBlank()) hint = a.hint
                 }
             }
@@ -85,9 +90,14 @@ class SubscriptionFetcher(private val context: Context) {
         if (BuildConfig.DEBUG) runCatching {
             java.io.File(context.cacheDir, "sub-$id-${if (isMain) "main" else "json"}.txt").writeText(resp.body)
         }
-        // Вместо серверов одни заглушки — это сообщение провайдера («Превышено количество устройств»).
+        // Вместо серверов одни заглушки — это сообщение провайдера («Превышено количество устройств»,
+        // «Данное приложение не поддерживается»). Без HWID — повод спросить ещё раз с ним.
         if (parsed.nodes.isEmpty() && parsed.notes.isNotBlank()) {
-            return Attempt.Empty("Провайдер сообщает: " + app.tropa.ui.Names.clean(parsed.notes.lines().joinToString(". ")))
+            val note = app.tropa.ui.Names.clean(parsed.notes.lines().joinToString(". "))
+            return Attempt.Stub(
+                if (hwid) "Провайдер сообщает: $note. Похоже, он пускает только свои приложения или лимит устройств исчерпан"
+                else "Провайдер сообщает: $note"
+            )
         }
         return if (parsed.nodes.isEmpty()) Attempt.Empty(if (isMain) parsed.hint else "") else Attempt.Ok(resp, parsed)
     }
@@ -99,7 +109,7 @@ class SubscriptionFetcher(private val context: Context) {
         // Маршруты провайдеры часто отдают только «своему» клиенту, поэтому
         // если их нет, спрашиваем ещё раз от имени Happ и берём только заголовки.
         if (h["routing"] == null && parsed.routing.isEmpty() && !agent.startsWith("Happ")) {
-            runCatching { get(url, "Happ/3.10.0", existing?.sendHwid == true) }.getOrNull()?.takeIf { it.code in 200..299 }?.let { happ ->
+            runCatching { get(url, HAPP, existing?.sendHwid == true) }.getOrNull()?.takeIf { it.code in 200..299 }?.let { happ ->
                 val r = ProviderRouting.decode(happ.headers["routing"]).ifEmpty { ProviderRouting.findInBody(happ.body) }
                 if (r.isNotEmpty()) h = h + ("routing" to r)
             }
@@ -166,6 +176,9 @@ class SubscriptionFetcher(private val context: Context) {
     }
 
     companion object {
+        /** Так представляется Happ (актуальная версия на ноябрь 2026): часть провайдеров смотрит на неё. */
+        const val HAPP = "Happ/4.9.0"
+
         fun parseUserinfo(v: String?): Map<String, Long> =
             v.orEmpty().split(';').mapNotNull { part ->
                 val k = part.substringBefore('=').trim().lowercase()

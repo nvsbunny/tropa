@@ -38,6 +38,12 @@ object XrayConfig {
 
     fun tag(id: String) = "n-$id"
 
+    /** Обычные серверы страны [code] в подписке [subId] (LTE и служебные — не в счёт). */
+    fun countryNodes(subs: List<Subscription>, subId: String, code: String): List<String> =
+        subs.firstOrNull { it.id == subId }?.nodes.orEmpty()
+            .filter { Names.kind(it.name) == Names.Kind.NORMAL && Names.country(it.name) == code }
+            .map { it.id }
+
     /**
      * Очередь выбора. Возвращает null, если сервер закреплён вручную.
      * Цена: обычные по очереди 1, 1001, 2001…; LTE — 1e9, то есть только если обычные легли.
@@ -53,6 +59,20 @@ object XrayConfig {
         val everyId = subs.flatMap { s -> s.nodes.map { it.id } }
         if (settings.choice == ServerChoice.MANUAL && settings.manualNodeId in everyId) {
             return Plan(settings.manualNodeId, emptyMap())
+        }
+        // Выбрана страна: все её обычные серверы в этой подписке с одной ценой — ядро держит самый быстрый.
+        if (settings.choice == ServerChoice.COUNTRY) {
+            val inCountry = countryNodes(subs, settings.countrySubId, settings.country)
+            if (inCountry.isNotEmpty()) {
+                val costs = linkedMapOf<String, Double>()
+                inCountry.forEach { costs[it] = if (it in broken) 1e6 else 1.0 }
+                // Не отвечает ни один сервер страны (у дешёвых подписок бывает) — лучше другая
+                // страна этой же подписки, чем совсем без интернета.
+                subs.firstOrNull { it.id == settings.countrySubId }?.nodes.orEmpty()
+                    .filter { Names.kind(it.name) == Names.Kind.NORMAL && it.id !in costs }
+                    .forEach { costs[it.id] = 1e9 }
+                return Plan(null, costs)
+            }
         }
         val active = subs.firstOrNull { it.id == settings.providerSubId && it.nodes.isNotEmpty() }
             ?: subs.firstOrNull { it.nodes.isNotEmpty() }

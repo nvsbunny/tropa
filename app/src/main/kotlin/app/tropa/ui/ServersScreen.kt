@@ -3,6 +3,7 @@ package app.tropa.ui
 import androidx.compose.foundation.background
 import app.tropa.data.ServerChoice
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -50,7 +51,12 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
 
     LaunchedEffect(Unit) { if (delays.isEmpty()) c.testAll() }
 
+    // У подписок с большим числом серверов (бывает и 130 технических имён) обычные серверы
+    // показываем по странам: одна строка на страну. Небольшие подписки — как раньше, поштучно.
+    val byCountry = subs.filter { (filter == null || it.id == filter) && it.nodes.size >= GROUP_FROM }
+    val grouped = byCountry.flatMap { s -> s.nodes.filter { Names.kind(it.name) == Names.Kind.NORMAL }.map { it.id } }.toSet()
     val all = subs.filter { filter == null || it.id == filter }.flatMap { s -> s.nodes.map { s to it } }
+        .filter { it.second.id !in grouped }
     val total = subs.sumOf { it.nodes.size }
     // Лучшие сверху. Не ответившие — в конце, UDP-серверы без проверки — между ними.
     val sorted = all.sortedWith(compareBy { (_, n) ->
@@ -110,7 +116,7 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
                 }
                 Text(
                     when (settings.choice) {
-                        ServerChoice.PROVIDER -> "Как решил ${providerSub?.title ?: "провайдер"}: " +
+                        ServerChoice.PROVIDER -> "Как решил ${providerSub?.title?.let(Names::subTitle) ?: "провайдер"}: " +
                             when (providerSub?.groupType) {
                                 null, "" -> "первый живой сервер по его списку."
                                 "url-test" -> "самый отзывчивый из его серверов, как его «Лучший сервер»."
@@ -121,6 +127,8 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
                             else "Тропа держит самый отзывчивый сервер. Нажмите «Проверить качество», чтобы выбирать ещё и по сервисам. ") +
                             "На Wi-Fi без LTE, на мобильном интернете LTE в запасе."
                         ServerChoice.MANUAL -> "Вы выбрали сервер сами. Чтобы вернуть автоматику, нажмите «Провайдер» или «Тропа»."
+                        ServerChoice.COUNTRY -> "Вы выбрали страну: ${Names.countryName(settings.country) ?: settings.country}. " +
+                            "Тропа держит в ней самый быстрый сервер. Чтобы вернуть автоматику, нажмите «Провайдер» или «Тропа»."
                     },
                     style = Type.caption, color = Palette.muted, modifier = Modifier.padding(top = 10.dp),
                 )
@@ -129,7 +137,7 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
                         Modifier.horizontalScroll(rememberScrollState()).padding(top = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        subs.forEach { s -> ChipButton(s.title, s.id == providerSub?.id) { c.setChoice(ServerChoice.PROVIDER, s.id) } }
+                        subs.forEach { s -> ChipButton(Names.subTitle(s.title), s.id == providerSub?.id) { c.setChoice(ServerChoice.PROVIDER, s.id) } }
                     }
                 }
             }
@@ -155,10 +163,11 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     ChipButton("Все", filter == null) { filter = null }
-                    subs.forEach { s -> ChipButton(s.title, filter == s.id) { filter = s.id } }
+                    subs.forEach { s -> ChipButton(Names.subTitle(s.title), filter == s.id) { filter = s.id } }
                 }
             }
         }
+        byCountry.forEach { s -> countries(s, delays, settings, usedId, c) }
         group("Задержка до 100 мс", fast, row,
             note = "Задержка — это отклик, а не скорость. Скорость зависит ещё и от загрузки сервера.")
         group("100–200 мс", good, row)
@@ -171,6 +180,99 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
             note = "Весь трафик идёт на сервер в России, а заблокированное провайдер сам отправляет за границу. " +
                 "Сайты видят российский адрес. В автоматику Тропа их не берёт — выберите вручную, если нужно.")
         item { Spacer(24.dp) }
+    }
+}
+
+/** С какого числа серверов подписка показывается по странам. У обычных подписок их 20–30, у крупных — за сотню. */
+private const val GROUP_FROM = 40
+
+/**
+ * Подписка по странам: строка на страну — флаг, название, сколько серверов, лучший отклик.
+ * Нажатие — выбрать страну (Тропа держит в ней самый быстрый сервер), стрелка — раскрыть серверы.
+ */
+private fun androidx.compose.foundation.lazy.LazyListScope.countries(
+    sub: Subscription,
+    delays: Map<String, Int>,
+    settings: app.tropa.data.Settings,
+    usedId: String?,
+    c: Controller,
+) {
+    val normal = sub.nodes.filter { Names.kind(it.name) == Names.Kind.NORMAL }
+    fun best(list: List<Node>) = list.mapNotNull { delays[it.id]?.takeIf { d -> d > 0 } }.minOrNull()
+    val groups = normal.groupBy { Names.country(it.name) ?: "" }.entries
+        .sortedWith(compareBy({ best(it.value) == null }, { best(it.value) ?: Int.MAX_VALUE }))
+    item(key = "c-h-${sub.id}") {
+        SectionLabel("${Names.subTitle(sub.title)} — по странам")
+        Text(
+            "Нажмите на страну — Тропа сама возьмёт в ней самый быстрый сервер. Стрелка справа — все серверы страны.",
+            style = Type.caption, color = Palette.muted, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+        )
+    }
+    groups.forEach { (code, nodes) ->
+        item(key = "c-${sub.id}-$code") {
+            var open by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+            val d = best(nodes)
+            val chosen = settings.choice == ServerChoice.COUNTRY && settings.countrySubId == sub.id && settings.country == code
+            val now = usedId != null && nodes.any { it.id == usedId }
+            Column {
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 58.dp)
+                        .clickable(enabled = code.isNotEmpty(), onClickLabel = "Выбрать страну") { c.selectCountry(sub.id, code) }
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Flag(code.ifEmpty { null })
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                if (code.isEmpty()) "Другие" else Names.countryName(code) ?: code,
+                                style = Type.body, color = if (d == null) Palette.muted else Palette.text,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (chosen) Pill("выбрана") else if (now) Pill("сейчас")
+                        }
+                        // Ни один проверяемый сервер страны не ответил — так и пишем, а не молчим.
+                        // UDP-серверы (Hysteria) по TCP не проверить, они не в счёт.
+                        val measured = nodes.mapNotNull { delays[it.id]?.takeIf { d -> d >= 0 } }
+                        val dead = measured.isNotEmpty() && measured.all { it == 0 }
+                        Text(
+                            "${nodes.size} ${plural(nodes.size, "сервер", "сервера", "серверов")}" + if (dead) " · не отвечают" else "",
+                            style = Type.caption, color = Palette.muted,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(delayText(d), style = Type.bodyStrong, color = if (d == null) Palette.muted else Palette.text)
+                        if (d != null) Box(Modifier.padding(top = 5.dp)) { QualityBars(d) }
+                    }
+                    Box(
+                        Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = if (open) "Свернуть" else "Показать серверы") { open = !open }
+                            .padding(8.dp),
+                    ) {
+                        Box(Modifier.graphicsLayer { rotationZ = if (open) 270f else 90f }) { Ico(Icons.chevron, tint = Palette.muted, size = 18.dp) }
+                    }
+                }
+                if (open) {
+                    nodes.sortedBy { delays[it.id]?.takeIf { d -> d > 0 } ?: Int.MAX_VALUE }.forEach { node ->
+                        val nd = delays[node.id]
+                        Row(
+                            Modifier.fillMaxWidth().clickable(onClickLabel = "Выбрать этот сервер") { c.selectNode(node.id) }
+                                .padding(start = 46.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                Names.serverName(node.name), style = Type.small, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                color = if (nd == 0) Palette.muted else Palette.text, modifier = Modifier.weight(1f),
+                            )
+                            if (node.id == usedId) Pill(if (settings.choice == ServerChoice.MANUAL) "выбран" else "сейчас")
+                            Text(delayText(nd), style = Type.caption, color = Palette.muted)
+                        }
+                    }
+                }
+                HorizontalDivider(color = Palette.line.copy(alpha = 0.55f), thickness = 1.dp)
+            }
+        }
     }
 }
 
@@ -216,14 +318,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.group(
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            Names.clean(node.name), style = Type.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            Names.serverName(node.name), style = Type.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             color = if (d == 0) Palette.muted else Palette.text,
                             modifier = Modifier.weight(1f, fill = false),
                         )
                         if (used) Pill(if (auto) "сейчас" else "выбран")
                     }
                     Text(
-                        if (advanced) "${sub.title}, ${Names.protocol(node)}" else sub.title,
+                        if (advanced) "${Names.subTitle(sub.title)}, ${Names.protocol(node)}" else Names.subTitle(sub.title),
                         style = Type.caption, color = Palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     // Что не открылось через этот сервер при последней проверке.

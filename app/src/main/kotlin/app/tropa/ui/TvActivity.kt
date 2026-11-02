@@ -139,7 +139,7 @@ class TvActivity : ComponentActivity() {
                     when {
                         status is CoreState.Status.Error -> (status as CoreState.Status.Error).message
                         current == null -> "Подписок пока нет — отправьте их с телефона"
-                        else -> Names.flag(Names.country(current.second.name)) + " " + Names.clean(current.second.name) +
+                        else -> Names.flag(Names.country(current.second.name)) + " " + Names.serverName(current.second.name) +
                             (delays[current.second.id]?.takeIf { it > 0 }?.let { " · $it мс" } ?: "")
                     },
                     style = Type.body.copy(fontSize = 22.sp, lineHeight = 30.sp),

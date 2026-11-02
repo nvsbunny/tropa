@@ -236,6 +236,12 @@ class Controller(private val context: Context, val store: Store) {
         if (CoreState.isOn) scheduleReload()
     }
 
+    /** Выбрать страну в подписке: Тропа держит в ней самый быстрый сервер. */
+    fun selectCountry(subId: String, code: String) {
+        store.updateSettings { it.copy(choice = ServerChoice.COUNTRY, country = code, countrySubId = subId) }
+        if (CoreState.isOn) scheduleReload()
+    }
+
     fun selectNode(id: String) {
         store.updateSettings { it.copy(choice = ServerChoice.MANUAL, manualNodeId = id) }
         if (CoreState.isOn) scheduleReload()
@@ -248,6 +254,13 @@ class Controller(private val context: Context, val store: Store) {
         val s = store.settings.value
         if (s.choice == ServerChoice.MANUAL) all.firstOrNull { it.second.id == s.manualNodeId }?.let { return it }
         _activeId.value?.let { id -> all.firstOrNull { it.second.id == id }?.let { return it } }
+        if (s.choice == ServerChoice.COUNTRY) {
+            val ids = app.tropa.core.XrayConfig.countryNodes(store.subs.value, s.countrySubId, s.country).toSet()
+            val d = _delays.value
+            all.filter { it.second.id in ids }.let { inCountry ->
+                (inCountry.filter { (d[it.second.id] ?: 0) > 0 }.minByOrNull { d[it.second.id]!! } ?: inCountry.firstOrNull())?.let { return it }
+            }
+        }
         // VPN выключен: показываем, что будет выбрано. LTE, мосты и служебные серверы
         // на Wi-Fi не выбираются, поэтому и здесь их не предлагаем.
         val d = _delays.value

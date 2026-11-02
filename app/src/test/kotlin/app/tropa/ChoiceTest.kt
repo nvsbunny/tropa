@@ -236,4 +236,40 @@ class ChoiceTest {
             }
         }
     }
+
+    /** Технические имена провайдеров — по-человечески, страна по коду в имени. */
+    @Test
+    fun technicalServerNames() {
+        assertEquals("SE", Names.country("SELFSTEAL NODE se-1 SE TCP"))
+        assertEquals("Швеция se-1 TCP", Names.serverName("SELFSTEAL NODE se-1 SE TCP"))
+        assertEquals("LT", Names.country("SELFSTEAL NODE lt-2 LT GRPC"))
+        assertEquals("Литва lt-2 GRPC", Names.serverName("SELFSTEAL NODE lt-2 LT GRPC"))
+        assertEquals("CH", Names.country("node ch-1"))
+        // Обычные имена не трогаем.
+        assertEquals("Швеция GRPC", Names.serverName("Швеция GRPC"))
+        assertEquals("Хельсинки, Финляндия", Names.serverName("🇫🇮 Хельсинки, Финляндия"))
+        assertEquals("Все операторы 12 LTE", Names.serverName("🇷🇺 ⭐️ Все операторы #12 LTE 🏳️").replace("#", ""))
+        assertEquals(null, Names.country("PREMIUM ОБХОД 1"))
+        assertEquals("💧 Пример @examplebot", Names.subTitle("💧 Пример 💧 @examplebot"))
+    }
+
+    /** Выбрана страна в большой подписке: в очереди только её обычные серверы, с одной ценой. */
+    @Test
+    fun countryChoice() {
+        val names = listOf("SELFSTEAL NODE se-1 SE TCP", "SELFSTEAL NODE se-2 SE GRPC", "SELFSTEAL NODE fi-7 FI GRPC", "tw-1 TW TCP", "🇷🇺 Все операторы LTE")
+        val s = sub("big", names)
+        val settings = Settings(choice = ServerChoice.COUNTRY, country = "SE", countrySubId = "big")
+        val plan = XrayConfig.plan(listOf(s), settings, onMobile = true, operator = "MegaFon", ranking = emptyList())
+        assertEquals(null, plan.fixed)
+        // Шведские — с ценой 1, остальные обычные (FI, TW) — запасные на случай, если Швеция не отвечает. LTE — нет.
+        assertEquals(s.nodes.take(4).map { it.id }.toSet(), plan.costs.keys)
+        assertTrue(s.nodes.take(2).all { plan.costs[it.id] == 1.0 })
+        assertTrue(s.nodes.drop(2).take(2).all { plan.costs.getValue(it.id) >= 1e9 })
+        assertEquals("TW", Names.country("tw-1 TW TCP"))
+        assertEquals("Тайвань tw-1 TCP", Names.serverName("tw-1 TW TCP"))
+        assertEquals("GB", Names.country("uk-1 UK TCP"))
+        assertEquals("Великобритания uk-1 TCP", Names.serverName("uk-1 UK TCP"))
+        assertEquals("AI", Names.country("ai-1 AI GRPC"))
+        assertEquals("Для нейросетей ai-1 GRPC", Names.serverName("ai-1 AI GRPC"))
+    }
 }

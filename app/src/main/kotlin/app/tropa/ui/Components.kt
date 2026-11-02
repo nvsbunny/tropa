@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -238,7 +239,9 @@ fun Flag(code: String?, size: Dp = 30.dp) {
             Modifier.size(size).clip(CircleShape).background(Palette.s2),
             contentAlignment = Alignment.Center,
         ) {
-            Text(code ?: "", style = Type.tiny, color = Palette.muted)
+            // Своего рисунка нет — системный эмодзи-флаг; страна не понятна — пустой кружок.
+            val emoji = Names.flag(code)
+            if (emoji.isNotEmpty()) Text(emoji, fontSize = (size.value * 0.62f).sp)
         }
         return
     }

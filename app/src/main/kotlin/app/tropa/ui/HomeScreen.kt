@@ -121,20 +121,22 @@ fun HomeScreen(
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            current?.let { Names.clean(it.second.name) } ?: "Сервер",
+                            current?.let { Names.serverName(it.second.name) } ?: "Сервер",
                             style = Type.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false),
                         )
                         when (settings.choice) {
                             ServerChoice.PROVIDER -> Pill("Провайдер")
                             ServerChoice.AUTO -> Pill("Автовыбор")
+                            ServerChoice.COUNTRY -> Pill("Страна")
                             ServerChoice.MANUAL -> Unit
                         }
                     }
                     Text(
                         if (settings.choice == ServerChoice.AUTO && settings.mergeSubs) "Лучший из $totalNodes ${plural(totalNodes, "сервера", "серверов", "серверов")} " +
                             "в ${subs.size} ${plural(subs.size, "подписке", "подписках", "подписках")}"
-                        else current?.first?.title ?: "",
+                        else if (settings.choice == ServerChoice.COUNTRY) "Самый быстрый в стране, " + (current?.first?.title?.let(Names::subTitle) ?: "")
+                        else current?.first?.title?.let(Names::subTitle) ?: "",
                         style = Type.caption, color = Palette.muted, modifier = Modifier.padding(top = 3.dp),
                     )
                 }
@@ -156,7 +158,7 @@ fun HomeScreen(
             }
             if (settings.mergeSubs || subs.size == 1) {
                 subs.filter { !it.isLocal }.forEach { PlanRow(it) }
-                subs.firstOrNull { it.announce.isNotBlank() }?.let { s -> Announce("Сообщение от ${s.title}: ${Names.clean(s.announce)}") }
+                subs.firstOrNull { it.announce.isNotBlank() }?.let { s -> Announce("Сообщение от ${Names.subTitle(s.title)}: ${Names.clean(s.announce)}") }
             }
         }
         // Подписки раздельно, как в Happ и INCY: своя карточка у каждой, нажатие делает её рабочей.

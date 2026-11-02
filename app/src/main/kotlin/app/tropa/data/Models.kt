@@ -57,7 +57,8 @@ data class QualityData(
 }
 
 /** Кто выбирает сервер: провайдер (его группа или порядок списка), Тропа по задержке или человек. */
-enum class ServerChoice { PROVIDER, AUTO, MANUAL }
+/** COUNTRY — пользователь выбрал страну в подписке, Тропа держит в ней самый быстрый сервер. */
+enum class ServerChoice { PROVIDER, AUTO, MANUAL, COUNTRY }
 
 data class Settings(
     val mode: RouteMode = RouteMode.RU_DIRECT,
@@ -75,6 +76,9 @@ data class Settings(
     val mergeSubs: Boolean = true,
     /** id сервера, выбранного вручную. */
     val manualNodeId: String = "",
+    /** Выбранная страна (ISO-код) и подписка, в которой её выбрали. */
+    val country: String = "",
+    val countrySubId: String = "",
     val ipv6: Boolean = true,
     /** Подсказку про российские приложения показываем, пока её не приняли или не закрыли. */
     val ruHintDismissed: Boolean = false,

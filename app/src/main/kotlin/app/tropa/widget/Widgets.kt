@@ -178,7 +178,7 @@ class ButtonWidget : GlanceAppWidget() {
                     Spacer(GlanceModifier.width(10.dp))
                     Column {
                         Label(if (on) "Включено" else if (busy) "Включаем…" else "Выключено", ink, 15.sp, bold = true)
-                        Label(if (on) (Names.flag(country) + " " + (countryName(country) ?: "VPN")).trim() else "Тропа", ink, 12.sp)
+                        Label(if (on) (Names.flag(country) + " " + (Names.countryName(country) ?: "VPN")).trim() else "Тропа", ink, 12.sp)
                     }
                 }
             } else {
@@ -220,7 +220,7 @@ class ConnectionWidget : GlanceAppWidget() {
             val flag = Names.flag(Names.country(node.name))
             val d = delays[node.id]?.takeIf { it > 0 }?.let { " · $it мс" }.orEmpty()
             val who = if (subs.size > 1) " · " + Names.subTitle(sub.title) else ""
-            "$flag ${Names.clean(node.name)}$d$who".trim()
+            "$flag ${Names.serverName(node.name)}$d$who".trim()
         }
         val second = when (status) {
             is CoreState.Status.On -> server ?: "Сервер выбирается"
@@ -345,17 +345,6 @@ class RefreshSubs : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         (context.applicationContext as TropaApp).controller.updateAll()
     }
-}
-
-private fun countryName(code: String?): String? = code?.let {
-    mapOf(
-        "FI" to "Финляндия", "SE" to "Швеция", "NL" to "Нидерланды", "DE" to "Германия", "LV" to "Латвия",
-        "LT" to "Литва", "EE" to "Эстония", "PL" to "Польша", "FR" to "Франция", "GB" to "Великобритания",
-        "US" to "США", "CH" to "Швейцария", "AT" to "Австрия", "CZ" to "Чехия", "NO" to "Норвегия",
-        "DK" to "Дания", "IT" to "Италия", "ES" to "Испания", "TR" to "Турция", "KZ" to "Казахстан",
-        "JP" to "Япония", "SG" to "Сингапур", "HK" to "Гонконг", "AE" to "ОАЭ", "AM" to "Армения",
-        "GE" to "Грузия", "RS" to "Сербия", "RU" to "Россия", "CA" to "Канада",
-    )[it]
 }
 
 class ButtonWidgetReceiver : GlanceAppWidgetReceiver() {

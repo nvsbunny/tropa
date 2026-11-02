@@ -195,4 +195,33 @@ class ParserTest {
             File("build/core-check/config-${mode.name}.json").writeText(json)
         }
     }
+
+    /**
+     * Провайдер, который без HWID отдаёт вместо серверов заглушки на порту 1 с текстом
+     * (так отвечают некоторые провайдеры). Это не серверы, а сообщение — по нему Тропа повторяет запрос с HWID.
+     */
+    @Test
+    fun stubsInsteadOfServersAreMessage() {
+        val links = listOf(
+            "vless://00000000-0000-0000-0000-000000000000@0.0.0.0:1?type=tcp#Данное приложение не поддерживается!",
+            "vless://00000000-0000-0000-0000-000000000000@0.0.0.0:1?type=tcp#Рекомендуемые приложения вы можете увидеть в боте",
+        ).joinToString("\n")
+        val b64 = Base64.getEncoder().encodeToString(links.toByteArray())
+        val r = SubscriptionParser.parse(b64, "e")
+        assertTrue(r.nodes.isEmpty())
+        assertTrue(r.notes.contains("не поддерживается"))
+
+        val yaml = """
+            proxies:
+              - {name: "Данное приложение не поддерживается!", type: vless, server: 0.0.0.0, port: 1, uuid: 00000000-0000-0000-0000-000000000000}
+              - {name: "Рекомендуемые приложения вы можете увидеть в боте", type: vless, server: 0.0.0.0, port: 1, uuid: 00000000-0000-0000-0000-000000000000}
+            proxy-groups:
+              - {name: "💧 Пример", type: select, proxies: ["⚡️ Fastest", "🇫🇮 Финляндия"]}
+              - {name: "⚡️ Fastest", type: url-test, proxies: []}
+              - {name: "🇫🇮 Финляндия", type: select, proxies: []}
+        """.trimIndent()
+        val y = SubscriptionParser.parse(yaml, "e")
+        assertTrue(y.nodes.isEmpty())
+        assertTrue(y.notes.contains("в боте"))
+    }
 }
