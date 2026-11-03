@@ -87,6 +87,12 @@ fun SettingsScreen(c: Controller, onAddSub: () -> Unit, onSendToTv: () -> Unit =
                         IconButtonBox(Icons.trash, "Удалить подписку", tint = Palette.muted) { confirmDelete = s }
                     }
                 }
+                if (s.url.startsWith("http://", true)) {
+                    Text(
+                        "Подписка по http: ключи идут по сети открыто. Лучше ссылка https от провайдера",
+                        style = Type.caption, color = Palette.danger, modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 if (s.lastError.isNotBlank()) {
                     Text("Последнее обновление: ${s.lastError}", style = Type.caption, color = Palette.danger, modifier = Modifier.padding(top = 8.dp))
                 }

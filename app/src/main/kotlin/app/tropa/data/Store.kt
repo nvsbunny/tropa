@@ -54,7 +54,8 @@ class Store(context: Context) {
     }
 
     init {
-        runCatching { load() }
+        // Не прочитался (испорчен, ключ шифрования пропал) — откладываем в сторону, а не затираем пустым.
+        runCatching { load() }.onFailure { if (file.exists()) file.renameTo(File(file.parentFile, "state.json.unreadable")) }
         runCatching { loadQuality() }
     }
 
@@ -127,13 +128,15 @@ class Store(context: Context) {
             }
         })
         val tmp = File(file.parentFile, "state.json.tmp")
-        tmp.writeText(root.toString())
+        tmp.writeText(Vault.seal(root.toString()))
         tmp.renameTo(file)
     }
 
     private fun load() {
         if (!file.exists()) return
-        val root = JSONObject(file.readText())
+        // До 0.3.0 файл был обычным JSON: читаем его как есть, при первом сохранении он зашифруется.
+        val text = file.readText()
+        val root = JSONObject(if (Vault.isSealed(text)) Vault.open(text) else text)
         root.optJSONObject("settings")?.let { o ->
             _settings.value = Settings(
                 mode = runCatching { RouteMode.valueOf(o.optString("mode")) }.getOrDefault(RouteMode.RU_DIRECT),

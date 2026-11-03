@@ -1,0 +1,27 @@
+# Автопроверка: при каждом изменении GitHub сам собирает Тропу и прогоняет тесты.
+# Действия закреплены по коммиту, а не по тегу: тег можно переписать, коммит — нет.
+name: Тесты
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@ac638b010cf58a27ee6c972d7336334ccaf61c96 # v4.4.1
+      - name: Тесты
+        run: ./gradlew testXrayDebugUnitTest --console=plain
+      - name: Сборка (без подписи)
+        run: ./gradlew assembleXrayDebug --console=plain

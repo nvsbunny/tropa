@@ -256,6 +256,9 @@ class TropaVpnService : VpnService() {
             }
             repeat(50) {
                 if (api.isAlive()) {
+                    // Ядро прочитало настройки — файл с ключами серверов на диске больше не нужен.
+                    // В root-режиме оставляем: скрипт запуска читает его сам.
+                    if (!rootMode) listOf("config.json", "config.yaml").forEach { File(workDir, it).delete() }
                     CoreState.api = api
                     CoreState.core = core
                     CoreState.plan = plan

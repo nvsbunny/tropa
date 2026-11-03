@@ -122,7 +122,10 @@ class Controller(private val context: Context, val store: Store) {
             _updating.value = _updating.value - url
             result.onSuccess { sub ->
                 store.upsertSub(sub)
-                say("«${sub.title}»: серверов ${sub.nodes.size}")
+                say(
+                    if (url.startsWith("http://", true)) "«${sub.title}»: серверов ${sub.nodes.size}. Подписка по http — ключи идут по сети открыто. Попросите у провайдера ссылку https"
+                    else "«${sub.title}»: серверов ${sub.nodes.size}"
+                )
                 afterServersChanged()
                 onDone(true)
             }.onFailure { e ->
