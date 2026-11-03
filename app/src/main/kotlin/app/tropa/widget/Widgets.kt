@@ -369,13 +369,18 @@ object WidgetUpdater {
     fun start(app: TropaApp) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scope.launch {
+            var lastStatus: CoreState.Status? = null
             combine(
                 CoreState.status, app.store.subs, app.store.settings, app.controller.activeId,
                 app.controller.delays, app.controller.updating,
             ) { it.toList() }
                 .distinctUntilChanged()
                 .collectLatest {
-                    delay(400) // несколько изменений подряд — одно обновление
+                    // Включение и выключение показываем сразу, остальное (отклик, подписки) — одним обновлением.
+                    val status = it[0] as CoreState.Status
+                    val switched = lastStatus == null || status::class != lastStatus!!::class
+                    lastStatus = status
+                    if (!switched) delay(400)
                     widgets.forEach { w -> runCatching { w.updateAll(app) } }
                 }
         }

@@ -142,7 +142,8 @@ class Controller(private val context: Context, val store: Store) {
             result.onSuccess {
                 store.upsertSub(it)
                 say("«${it.title}» обновлена")
-                afterServersChanged()
+                // Те же серверы и маршруты — соединение не трогаем: иначе каждое обновление рвёт связь.
+                if (it.nodes.map { n -> n.id } != sub.nodes.map { n -> n.id } || it.routing != sub.routing) afterServersChanged()
             }.onFailure { e ->
                 store.upsertSub(sub.copy(lastError = e.message.orEmpty()))
                 say("«${sub.title}»: ${e.message}")
