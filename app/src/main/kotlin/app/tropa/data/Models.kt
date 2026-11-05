@@ -92,4 +92,6 @@ data class Settings(
     val autoUpdate: Boolean = true,
     /** Root-режим «для опытных»: TPROXY и iptables вместо VPN. */
     val rootMode: Boolean = false,
+    /** Экран серверов: порядок, заданный провайдером, вместо сортировки по отклику. */
+    val providerOrder: Boolean = false,
 )

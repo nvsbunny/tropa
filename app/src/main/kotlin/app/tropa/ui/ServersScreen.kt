@@ -43,6 +43,7 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
     val subs by c.store.subs.collectAsState()
     val settings by c.store.settings.collectAsState()
     val delays by c.delays.collectAsState()
+    val rough by c.rough.collectAsState()
     val activeId by c.activeId.collectAsState()
     val testing by c.testing.collectAsState()
     var filter by remember { mutableStateOf<String?>(null) }
@@ -53,7 +54,7 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
 
     // У подписок с большим числом серверов (бывает и 130 технических имён) обычные серверы
     // показываем по странам: одна строка на страну. Небольшие подписки — как раньше, поштучно.
-    val byCountry = subs.filter { (filter == null || it.id == filter) && it.nodes.size >= GROUP_FROM }
+    val byCountry = subs.filter { !settings.providerOrder && (filter == null || it.id == filter) && it.nodes.size >= GROUP_FROM }
     val grouped = byCountry.flatMap { s -> s.nodes.filter { Names.kind(it.name) == Names.Kind.NORMAL }.map { it.id } }.toSet()
     val all = subs.filter { filter == null || it.id == filter }.flatMap { s -> s.nodes.map { s to it } }
         .filter { it.second.id !in grouped }
@@ -76,7 +77,7 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
     val dead = regular.filter { delays[it.second.id] == 0 }
     val usedId = activeId ?: settings.manualNodeId.takeIf { settings.choice == ServerChoice.MANUAL }
     val providerSub = subs.firstOrNull { it.id == settings.providerSubId } ?: subs.firstOrNull()
-    val row = RowOpts(delays, usedId, settings.choice != ServerChoice.MANUAL, settings.advanced, c, if (quality.fresh) quality.byId else emptyMap())
+    val row = RowOpts(delays, usedId, settings.choice != ServerChoice.MANUAL, settings.advanced, c, if (quality.fresh) quality.byId else emptyMap(), rough)
 
     LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
         item {
@@ -122,7 +123,7 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
                                 "url-test" -> "самый отзывчивый из его серверов, как его «Лучший сервер»."
                                 else -> "его собственная группа серверов."
                             } +
-                            " LTE-серверы берём только на мобильном интернете."
+                            " LTE-серверы — только на мобильном интернете и только если остальные не отвечают."
                         ServerChoice.AUTO -> (if (quality.fresh) "Тропа держит самый отзывчивый сервер из тех, где при проверке открылись Google, YouTube, Telegram, WhatsApp и Claude. "
                             else "Тропа держит самый отзывчивый сервер. Нажмите «Проверить качество», чтобы выбирать ещё и по сервисам. ") +
                             "На Wi-Fi без LTE, на мобильном интернете LTE наравне с остальными."
@@ -166,19 +167,30 @@ fun ServersScreen(c: Controller, onAddSub: () -> Unit) {
                     subs.forEach { s -> ChipButton(Names.subTitle(s.title), filter == s.id) { filter = s.id } }
                 }
             }
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ChipButton("По отклику", !settings.providerOrder) { c.setProviderOrder(false) }
+                ChipButton("Как у провайдера", settings.providerOrder) { c.setProviderOrder(true) }
+            }
         }
-        byCountry.forEach { s -> countries(s, delays, settings, usedId, c) }
-        group("Задержка до 100 мс", fast, row,
-            note = "Задержка — это отклик, а не скорость. Скорость зависит ещё и от загрузки сервера.")
-        group("100–200 мс", good, row)
-        group("Больше 200 мс", slow, row)
-        group(if (delays.isEmpty()) "Ещё не проверены" else "Проверим после подключения", unknown, row)
-        group("Не отвечают", dead, row)
-        group("Для мобильного интернета (LTE, белые списки)", kinds[Names.Kind.MOBILE].orEmpty(), row,
-            note = "Работают только на мобильном интернете и не у всех операторов. На мобильном Тропа берёт их наравне с остальными, если они отзывчивее. На Wi-Fi не выбирает.")
-        group("Российские серверы", kinds[Names.Kind.RU_EXIT].orEmpty(), row,
-            note = "Весь трафик идёт на сервер в России, а заблокированное провайдер сам отправляет за границу. " +
-                "Сайты видят российский адрес. В автоматику Тропа их не берёт — выберите вручную, если нужно.")
+        val delayNote = "Задержка — это отклик, а не скорость. Скорость зависит ещё и от загрузки сервера. " +
+            "Значок ≈ — только время соединения: через сам сервер отклик не мерили."
+        if (settings.providerOrder) {
+            subs.filter { filter == null || it.id == filter }.forEachIndexed { i, s ->
+                group(Names.subTitle(s.title), s.nodes.map { s to it }, row, note = delayNote.takeIf { i == 0 })
+            }
+        } else {
+            byCountry.forEach { s -> countries(s, delays, settings, usedId, c) }
+            group("Задержка до 100 мс", fast, row, note = delayNote)
+            group("100–200 мс", good, row)
+            group("Больше 200 мс", slow, row)
+            group(if (delays.isEmpty()) "Ещё не проверены" else "Проверим после подключения", unknown, row)
+            group("Не отвечают", dead, row)
+            group("Для мобильного интернета (LTE, белые списки)", kinds[Names.Kind.MOBILE].orEmpty(), row,
+                note = "Работают только на мобильном интернете и не у всех операторов. В режиме «Тропа» на мобильном они наравне с остальными. На Wi-Fi Тропа их не выбирает.")
+            group("Российские серверы", kinds[Names.Kind.RU_EXIT].orEmpty(), row,
+                note = "Весь трафик идёт на сервер в России, а заблокированное провайдер сам отправляет за границу. " +
+                    "Сайты видят российский адрес. В автоматику Тропа их не берёт — выберите вручную, если нужно.")
+        }
         item { Spacer(24.dp) }
     }
 }
@@ -283,6 +295,7 @@ private class RowOpts(
     val advanced: Boolean,
     val c: Controller,
     val quality: Map<String, app.tropa.data.QualityInfo> = emptyMap(),
+    val rough: Set<String> = emptySet(),
 )
 
 private fun androidx.compose.foundation.lazy.LazyListScope.group(
@@ -335,7 +348,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.group(
                     }
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(delayText(d), style = Type.bodyStrong, color = if (d == 0) Palette.muted else Palette.text)
+                    Text(
+                        (if (node.id in o.rough) "≈ " else "") + delayText(d),
+                        style = Type.bodyStrong, color = if (d == 0) Palette.muted else Palette.text,
+                    )
                     if (d != null && d > 0) Box(Modifier.padding(top = 5.dp)) { QualityBars(d) }
                 }
             }

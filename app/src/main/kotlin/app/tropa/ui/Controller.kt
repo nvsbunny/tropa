@@ -47,6 +47,10 @@ class Controller(private val context: Context, val store: Store) {
     private val _delays = MutableStateFlow<Map<String, Int>>(emptyMap())
     val delays: StateFlow<Map<String, Int>> = _delays.asStateFlow()
 
+    /** Серверы, у которых известно только время TCP-соединения, а не отклик через сам сервер. */
+    private val _rough = MutableStateFlow<Set<String>>(emptySet())
+    val rough: StateFlow<Set<String>> = _rough.asStateFlow()
+
     /** Какой сервер сейчас используется (по данным ядра). */
     private val _activeId = MutableStateFlow<String?>(null)
     val activeId: StateFlow<String?> = _activeId.asStateFlow()
@@ -199,7 +203,9 @@ class Controller(private val context: Context, val store: Store) {
                 val observed = api?.observatory().orEmpty().filterValues { it > 0 || settled }
                 val checked = store.quality.value.takeIf { it.fresh }?.byId?.mapValues { it.value.delay }.orEmpty()
                 val known = observed + checked
-                Ping.tcp(nodes.filter { it.id !in known }) + known
+                val tcp = Ping.tcp(nodes.filter { it.id !in known })
+                _rough.value = tcp.filterValues { it > 0 }.keys
+                tcp + known
             }
             _delays.value = result
             _testing.value = false
@@ -424,6 +430,8 @@ class Controller(private val context: Context, val store: Store) {
     fun setAutoUpdate(enabled: Boolean) = store.updateSettings { it.copy(autoUpdate = enabled) }
 
     fun setAdvanced(enabled: Boolean) = store.updateSettings { it.copy(advanced = enabled) }
+
+    fun setProviderOrder(enabled: Boolean) = store.updateSettings { it.copy(providerOrder = enabled) }
 
     /** Root-режим: сначала спрашиваем root (Magisk покажет окно), без него не включаем. */
     fun setRootMode(enabled: Boolean) {
