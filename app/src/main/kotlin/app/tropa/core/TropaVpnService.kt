@@ -192,7 +192,9 @@ class TropaVpnService : VpnService() {
         // IPv6 раздаём, только если он правда работает в текущей сети. Бывает, что адрес IPv6 у Wi-Fi есть,
         // а наружу по нему не пройти (так у роутеров с VPN): тогда DNS отдавал бы ya.ru адрес IPv6,
         // и сайты, которые идут напрямую, не открывались бы.
-        val settings = store.settings.value.let { if (it.ipv6 && !ipv6Works()) it.copy(ipv6 = false) else it }
+        // На мобильном интернете — только IPv4: IPv6 у оператора есть, а LTE-серверы его не пропускают,
+        // и всё, что идёт по домену, ломалось. Telegram ходит по IPv4 и этого не замечал.
+        val settings = store.settings.value.let { if (it.ipv6 && (isOnMobile() || !ipv6Works())) it.copy(ipv6 = false) else it }
         val nodes = store.allNodes().map { it.second }
         onMobile = isOnMobile()
         if (nodes.isEmpty()) {

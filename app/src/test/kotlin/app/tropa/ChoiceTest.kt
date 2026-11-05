@@ -74,21 +74,27 @@ class ChoiceTest {
     }
 
     @Test
-    fun mobileTreatsFittingLteEqually() {
+    fun autoPutsFittingLteFirstOnMobile() {
         val s = listOf(sub())
         val normal = XrayConfig.plan(s, Settings(choice = ServerChoice.AUTO), false, "", emptyList()).costs.keys.toList()
-        // Очередь с домашнего Wi-Fi на мобильном не действует: все по одной цене, решает отклик.
+        // Очередь с домашнего Wi-Fi на мобильном не действует, обычные серверы — запас по одной цене.
         val plan = XrayConfig.plan(s, Settings(choice = ServerChoice.AUTO), onMobile = true, operator = "MTS RUS", ranking = normal.reversed())
-        assertTrue(plan.costs.values.all { it == 1.0 })
+        assertTrue(normal.all { plan.costs[it] == 1001.0 })
         // У МТС не пробуем ни «Кроме Т-Мобайл, МТС», ни сервер только для Билайна.
-        assertEquals(listOf("🇷🇺 Все операторы 6 LTE"), plan.costs.keys.filter { it !in normal }.map { nameOf(s, it) })
+        assertEquals(listOf("🇷🇺 Все операторы 6 LTE"), plan.costs.filterValues { it == 1.0 }.keys.map { nameOf(s, it) })
     }
 
     @Test
-    fun providerChoiceKeepsLteAsBackup() {
+    fun providerChoicePutsLteFirstOnMobile() {
         val s = listOf(sub())
         val plan = XrayConfig.plan(s, Settings(choice = ServerChoice.PROVIDER), onMobile = true, operator = "MTS RUS", ranking = emptyList())
-        assertEquals(listOf("🇷🇺 Все операторы 6 LTE"), plan.costs.filterValues { it >= 1e9 }.keys.map { nameOf(s, it) })
+        assertEquals(listOf("🇷🇺 Все операторы 6 LTE"), plan.costs.filterValues { it == 1.0 }.keys.map { nameOf(s, it) })
+        // Обычные серверы остаются запасом и сохраняют порядок провайдера.
+        val rest = plan.costs.filterValues { it > 1.0 }.values.toList()
+        assertTrue(rest.isNotEmpty() && rest.all { it >= 1000.0 } && rest == rest.sorted())
+        // На Wi-Fi LTE в выборе нет.
+        val wifi = XrayConfig.plan(s, Settings(choice = ServerChoice.PROVIDER), onMobile = false, operator = "MTS RUS", ranking = emptyList())
+        assertTrue(wifi.costs.keys.none { nameOf(s, it).contains("LTE") })
     }
 
     /** Первый в очереди стал отвечать за 351 мс, а пятый — за 109: берём пятый. */

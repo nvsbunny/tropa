@@ -36,6 +36,9 @@ object XrayConfig {
     /** Что выбрано и с какой ценой — по этому приложение понимает, какой сервер сейчас работает. */
     data class Plan(val fixed: String?, val costs: Map<String, Double>)
 
+    /** Для наблюдения за откликом — без TLS: иначе в цифру входит шифрование, и она в разы больше пинга. */
+    private const val PROBE_URL = "http://www.gstatic.com/generate_204"
+
     /** Насколько дороже следующий сервер в очереди проверки: на 5 %. */
     private const val RANK_STEP = 0.05
 
@@ -104,13 +107,17 @@ object XrayConfig {
         val step = if (settings.choice == ServerChoice.AUTO) RANK_STEP else 1000.0
         if (order.isEmpty()) normal.forEach { costs[it] = 1.0 }
         else order.forEachIndexed { i, id -> costs[id] = 1.0 + i * step }
-        // Автовыбор на мобильном интернете: LTE наравне с обычными, побеждает самый отзывчивый.
-        val lteEqual = onMobile && settings.choice == ServerChoice.AUTO
-        if (lteEqual) mobile.forEach { costs[it] = 1.0 }
+        // На мобильном интернете LTE всегда первыми: самый отзывчивый из живых. Обычные — запас.
+        val lteFirst = onMobile && mobile.isNotEmpty() &&
+            (settings.choice == ServerChoice.AUTO || settings.choice == ServerChoice.PROVIDER)
+        if (lteFirst) {
+            costs.keys.toList().forEach { costs[it] = costs.getValue(it) + 1000.0 }
+            mobile.forEach { costs[it] = 1.0 }
+        }
         // На этих серверах при последней проверке что-то не открылось (например, Claude
         // на одном из серверов): берём их, только если остальные не отвечают.
         costs.keys.filter { it in broken }.forEach { costs[it] = costs.getValue(it) * 1e6 }
-        if (onMobile && !lteEqual) mobile.forEach { costs[it] = 1e9 }
+        if (onMobile && !lteFirst) mobile.forEach { costs[it] = 1e9 }
         if (costs.isEmpty()) {
             // Обычных нет: берём что есть, лишь бы работало.
             nodes.forEach { costs[it.id] = 1.0 }
@@ -246,7 +253,7 @@ object XrayConfig {
             config.put("burstObservatory", JSONObject()
                 .put("subjectSelector", JSONArray(costs.keys.map(::tag)))
                 .put("pingConfig", JSONObject()
-                    .put("destination", TEST_URL)
+                    .put("destination", PROBE_URL)
                     .put("interval", "1m")
                     .put("sampling", 3)
                     .put("timeout", "10s")))
