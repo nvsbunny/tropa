@@ -33,7 +33,7 @@ import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.action.actionStartService
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
+import androidx.glance.appwidget.runComposition
 import androidx.glance.background
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
@@ -69,6 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /*
@@ -164,9 +165,11 @@ class ButtonWidget : GlanceAppWidget() {
         val on = status is CoreState.Status.On
         val busy = status == CoreState.Status.Connecting
         val size = LocalSize.current
-        val country = if (on) a.controller.currentNode()?.let { Names.country(it.second.name) } else null
+        // Пока ядро не назвало сервер, страну не угадываем. У LTE-серверов флаг — вход в России, а не выход.
+        val node = if (on && activeId != null) a.controller.currentNode()?.second else null
+        val lte = node != null && Names.kind(node.name) == Names.Kind.MOBILE
+        val country = node?.takeIf { !lte }?.let { Names.country(it.name) }
         val action = toggleAction(context, status, subs.any { it.nodes.isNotEmpty() })
-        activeId // перерисовать, когда ядро сменило сервер
         Box(
             GlanceModifier.fillMaxSize().cornerRadius(26.dp).background(if (on || busy) Palette.vpn else Palette.s1).clickable(action),
             contentAlignment = Alignment.Center,
@@ -178,7 +181,7 @@ class ButtonWidget : GlanceAppWidget() {
                     Spacer(GlanceModifier.width(10.dp))
                     Column {
                         Label(if (on) "Включено" else if (busy) "Включаем…" else "Выключено", ink, 15.sp, bold = true)
-                        Label(if (on) (Names.flag(country) + " " + (Names.countryName(country) ?: "VPN")).trim() else "Тропа", ink, 12.sp)
+                        Label(if (lte) "LTE" else if (on) (Names.flag(country) + " " + (Names.countryName(country) ?: "VPN")).trim() else "Тропа", ink, 12.sp)
                     }
                 }
             } else {
@@ -186,7 +189,7 @@ class ButtonWidget : GlanceAppWidget() {
                     Icon(R.drawable.ic_power, ink, 26.dp)
                     if (size.height >= 64.dp) {
                         Spacer(GlanceModifier.height(4.dp))
-                        Label(if (on) Names.flag(country).ifEmpty { "Вкл" } else if (busy) "…" else "Выкл", ink, 12.sp, bold = true)
+                        Label(if (lte) "LTE" else if (on) Names.flag(country).ifEmpty { "Вкл" } else if (busy) "…" else "Выкл", ink, 12.sp, bold = true)
                     }
                 }
             }
@@ -217,7 +220,7 @@ class ConnectionWidget : GlanceAppWidget() {
         val size = LocalSize.current
         val current = a.controller.currentNode()
         val server = current?.let { (sub, node) ->
-            val flag = Names.flag(Names.country(node.name))
+            val flag = if (Names.kind(node.name) == Names.Kind.MOBILE) "" else Names.flag(Names.country(node.name))
             val d = delays[node.id]?.takeIf { it > 0 }?.let { " · $it мс" }.orEmpty()
             val who = if (subs.size > 1) " · " + Names.subTitle(sub.title) else ""
             "$flag ${Names.serverName(node.name)}$d$who".trim()
@@ -361,10 +364,27 @@ class SubsWidgetReceiver : GlanceAppWidgetReceiver() {
 
 /**
  * Обновляет виджеты, когда меняется то, что на них видно: статус, сервер, отклик, подписки.
- * Своего таймера нет — батарею виджеты не тратят.
+ *
+ * Рисуем сами и сразу отдаём системе. Обычный updateAll идёт через WorkManager: когда VPN выключен
+ * и телефон на батарее, заданию некуда спешить, и виджет долго показывает старое состояние.
+ * Если процесс убили вместе с VPN, виджет поправит системное обновление раз в 30 минут (см. res/xml).
  */
 object WidgetUpdater {
     private val widgets get() = listOf(ButtonWidget(), ConnectionWidget(), SubsWidget())
+
+    @OptIn(androidx.glance.ExperimentalGlanceApi::class)
+    private suspend fun redraw(app: TropaApp) {
+        val glance = GlanceAppWidgetManager(app)
+        val system = android.appwidget.AppWidgetManager.getInstance(app)
+        widgets.forEach { w ->
+            glance.getGlanceIds(w.javaClass).forEach { id ->
+                runCatching {
+                    val views = w.runComposition(app, id, sizes = glance.getAppWidgetSizes(id)).first()
+                    system.updateAppWidget(glance.getAppWidgetId(id), views)
+                }
+            }
+        }
+    }
 
     fun start(app: TropaApp) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -381,7 +401,7 @@ object WidgetUpdater {
                     val switched = lastStatus == null || status::class != lastStatus!!::class
                     lastStatus = status
                     if (!switched) delay(400)
-                    widgets.forEach { w -> runCatching { w.updateAll(app) } }
+                    redraw(app)
                 }
         }
         // Живой предпросмотр в списке виджетов (Android 15+). Система ограничивает частоту

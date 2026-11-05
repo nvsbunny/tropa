@@ -64,8 +64,9 @@ object MihomoConfig {
             val mobile = costs.filterValues { it >= 1e9 }.keys.toList()
             val tiers = mutableListOf<String>()
             if (main.isNotEmpty()) {
-                val same = main.values.distinct().size == 1
-                groups += testGroup(GROUP_MAIN, if (same) "url-test" else "fallback", main.entries.sortedBy { it.value }.map { it.key })
+                // Строгий порядок — только у провайдера (цены от 1000), иначе решает отклик.
+                val strict = main.values.any { it >= 1000.0 }
+                groups += testGroup(GROUP_MAIN, if (strict) "fallback" else "url-test", main.entries.sortedBy { it.value }.map { it.key })
                 tiers += GROUP_MAIN
             }
             if (broken.isNotEmpty()) { groups += testGroup(GROUP_BROKEN, "url-test", broken); tiers += GROUP_BROKEN }

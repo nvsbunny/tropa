@@ -192,7 +192,11 @@ class Controller(private val context: Context, val store: Store) {
             val result = withContext(Dispatchers.IO) {
                 // Точнее всего — наблюдатель ядра (при включённом VPN) и свежая проверка качества:
                 // обе меряют отклик через сам сервер. Остальным — время TCP-соединения.
-                val observed = api?.observatory().orEmpty().filterValues { it > 0 }
+                // Первые полторы минуты замеров мало. Потом «мёртв» — вердикт ядра: подставлять вместо него
+                // время TCP-соединения нельзя, оно показывает 30 мс и у сервера, через который ничего не идёт.
+                val since = (CoreState.status.value as? CoreState.Status.On)?.since
+                val settled = since != null && System.currentTimeMillis() - since > 90_000
+                val observed = api?.observatory().orEmpty().filterValues { it > 0 || settled }
                 val checked = store.quality.value.takeIf { it.fresh }?.byId?.mapValues { it.value.delay }.orEmpty()
                 val known = observed + checked
                 Ping.tcp(nodes.filter { it.id !in known }) + known
@@ -483,6 +487,10 @@ class Controller(private val context: Context, val store: Store) {
             launch(Dispatchers.IO) {
                 delay(1500)
                 testAll()
+                launch {
+                    delay(100_000)
+                    testAll()
+                }
                 while (isActive) {
                     refreshActive()
                     delay(if (visible.value) 5000 else 30_000)

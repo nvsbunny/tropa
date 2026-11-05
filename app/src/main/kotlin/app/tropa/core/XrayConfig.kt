@@ -36,6 +36,9 @@ object XrayConfig {
     /** Что выбрано и с какой ценой — по этому приложение понимает, какой сервер сейчас работает. */
     data class Plan(val fixed: String?, val costs: Map<String, Double>)
 
+    /** Насколько дороже следующий сервер в очереди проверки: на 5 %. */
+    private const val RANK_STEP = 0.05
+
     fun tag(id: String) = "n-$id"
 
     /** Обычные серверы страны [code] в подписке [subId] (LTE и служебные — не в счёт). */
@@ -89,18 +92,25 @@ object XrayConfig {
         val mobile = nodes.filter { kind[it.id] == Names.Kind.MOBILE }.map { it.id }
 
         val order: List<String> = when {
-            settings.choice == ServerChoice.AUTO && ranking.isNotEmpty() ->
+            // Очередь проверки померена дома на Wi-Fi: на мобильном интернете она ни о чём не говорит.
+            settings.choice == ServerChoice.AUTO && ranking.isNotEmpty() && !onMobile ->
                 ranking.filter { it in normal } + normal.filter { it !in ranking }
             settings.choice == ServerChoice.PROVIDER && active?.groupType.isNullOrBlank() -> normal // порядок провайдера
             else -> emptyList() // «самый отзывчивый»: у всех одна цена
         }
         val costs = linkedMapOf<String, Double>()
+        // Порядок провайдера — строгий. Очередь Тропы — только подсказка: она держит один сервер,
+        // пока отклики похожи, но сервер, который стал в разы медленнее, уступает место.
+        val step = if (settings.choice == ServerChoice.AUTO) RANK_STEP else 1000.0
         if (order.isEmpty()) normal.forEach { costs[it] = 1.0 }
-        else order.forEachIndexed { i, id -> costs[id] = 1.0 + i * 1000.0 }
+        else order.forEachIndexed { i, id -> costs[id] = 1.0 + i * step }
+        // Автовыбор на мобильном интернете: LTE наравне с обычными, побеждает самый отзывчивый.
+        val lteEqual = onMobile && settings.choice == ServerChoice.AUTO
+        if (lteEqual) mobile.forEach { costs[it] = 1.0 }
         // На этих серверах при последней проверке что-то не открылось (например, Claude
         // на одном из серверов): берём их, только если остальные не отвечают.
         costs.keys.filter { it in broken }.forEach { costs[it] = costs.getValue(it) * 1e6 }
-        if (onMobile) mobile.forEach { costs[it] = 1e9 }
+        if (onMobile && !lteEqual) mobile.forEach { costs[it] = 1e9 }
         if (costs.isEmpty()) {
             // Обычных нет: берём что есть, лишь бы работало.
             nodes.forEach { costs[it.id] = 1.0 }
@@ -231,11 +241,15 @@ object XrayConfig {
             .put("outbounds", outbounds)
             .put("routing", routing)
         if (fixed == null && costs.isNotEmpty()) {
-            config.put("observatory", JSONObject()
+            // Проверки разнесены по времени: сорок разом забивают мобильный канал, отклики раздуваются,
+            // а медленные серверы падают по таймауту. Решение — по нескольким последним замерам.
+            config.put("burstObservatory", JSONObject()
                 .put("subjectSelector", JSONArray(costs.keys.map(::tag)))
-                .put("probeUrl", TEST_URL)
-                .put("probeInterval", "2m")
-                .put("enableConcurrency", true))
+                .put("pingConfig", JSONObject()
+                    .put("destination", TEST_URL)
+                    .put("interval", "1m")
+                    .put("sampling", 3)
+                    .put("timeout", "10s")))
         }
         if (tproxyPort > 0) {
             // Всё, что ядро отправляет само, помечаем: правила iptables такой трафик не перехватывают.

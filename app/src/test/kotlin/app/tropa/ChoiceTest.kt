@@ -74,13 +74,33 @@ class ChoiceTest {
     }
 
     @Test
-    fun mobileKeepsFittingLteAsBackup() {
+    fun mobileTreatsFittingLteEqually() {
         val s = listOf(sub())
-        val plan = XrayConfig.plan(s, Settings(choice = ServerChoice.AUTO), onMobile = true, operator = "MTS RUS", ranking = emptyList())
-        val lte = plan.costs.filterValues { it >= 1e9 }.keys.map { nameOf(s, it) }
+        val normal = XrayConfig.plan(s, Settings(choice = ServerChoice.AUTO), false, "", emptyList()).costs.keys.toList()
+        // Очередь с домашнего Wi-Fi на мобильном не действует: все по одной цене, решает отклик.
+        val plan = XrayConfig.plan(s, Settings(choice = ServerChoice.AUTO), onMobile = true, operator = "MTS RUS", ranking = normal.reversed())
+        assertTrue(plan.costs.values.all { it == 1.0 })
         // У МТС не пробуем ни «Кроме Т-Мобайл, МТС», ни сервер только для Билайна.
-        assertEquals(listOf("🇷🇺 Все операторы 6 LTE"), lte)
-        assertTrue(plan.costs.filterValues { it < 1e9 }.isNotEmpty())
+        assertEquals(listOf("🇷🇺 Все операторы 6 LTE"), plan.costs.keys.filter { it !in normal }.map { nameOf(s, it) })
+    }
+
+    @Test
+    fun providerChoiceKeepsLteAsBackup() {
+        val s = listOf(sub())
+        val plan = XrayConfig.plan(s, Settings(choice = ServerChoice.PROVIDER), onMobile = true, operator = "MTS RUS", ranking = emptyList())
+        assertEquals(listOf("🇷🇺 Все операторы 6 LTE"), plan.costs.filterValues { it >= 1e9 }.keys.map { nameOf(s, it) })
+    }
+
+    /** Первый в очереди стал отвечать за 351 мс, а пятый — за 109: берём пятый. */
+    @Test
+    fun fasterServerBeatsOldRanking() {
+        val names = (1..6).map { "🇫🇮 Сервер $it" }
+        val s = listOf(sub("big", names))
+        val ids = s[0].nodes.map { it.id }
+        val costs = XrayConfig.plan(s, Settings(choice = ServerChoice.AUTO), false, "", ids).costs
+        assertTrue(109 * costs.getValue(ids[4]) < 351 * costs.getValue(ids[0]))
+        // Похожие отклики — держимся очереди, а не прыгаем между серверами.
+        assertTrue(100 * costs.getValue(ids[0]) < 99 * costs.getValue(ids[4]))
     }
 
     @Test
