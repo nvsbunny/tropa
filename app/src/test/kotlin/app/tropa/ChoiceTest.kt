@@ -160,6 +160,7 @@ class ChoiceTest {
         """.trimIndent()
         val r = SubscriptionParser.parse(yaml, "c")
         assertEquals("url-test", r.groupType)
+        assertEquals("🚀 Выбор", r.groupName)
         assertEquals(listOf("B", "A"), r.groupMembers.map { id -> r.nodes.first { it.id == id }.name })
     }
 
@@ -175,6 +176,7 @@ class ChoiceTest {
         val r = SubscriptionParser.parse(json, "m")
         assertEquals(1, r.nodes.size)
         assertEquals("url-test", r.groupType)
+        assertEquals("🚀 Лучший", r.groupName)
         assertTrue(r.routing.contains("BlockQuic"))
         val s = Subscription(id = "m", url = "", title = "Провайдер A", nodes = r.nodes, routing = r.routing)
         val p = app.tropa.core.ProviderRouting.parse(r.routing)!!

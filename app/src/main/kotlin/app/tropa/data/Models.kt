@@ -35,6 +35,8 @@ data class Subscription(
      */
     val groupType: String = "",
     val groupMembers: List<String> = emptyList(),
+    /** Как провайдер назвал свою группу: «Автовыбор протоколов», «Лучший сервер». */
+    val groupName: String = "",
     /** Провайдер пускает только с HWID: запомнили после первого отказа. */
     val sendHwid: Boolean = false,
 ) {

@@ -132,6 +132,7 @@ class SubscriptionFetcher(private val context: Context) {
             announce = listOf(decodeHeader(h["announce"]).orEmpty(), parsed.notes).filter { it.isNotBlank() }.joinToString("\n"),
             supportUrl = h["support-url"].orEmpty(),
             groupType = parsed.groupType,
+            groupName = parsed.groupName,
             groupMembers = parsed.groupMembers,
             routing = ProviderRouting.decode(h["routing"]).ifEmpty { ProviderRouting.findInBody(resp.body) }
                 .ifEmpty { parsed.routing }

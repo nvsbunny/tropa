@@ -102,6 +102,22 @@ fun SettingsScreen(c: Controller, onAddSub: () -> Unit, onSendToTv: () -> Unit =
             }
         }
 
+        val traffic by c.traffic.collectAsState()
+        SectionLabel("Трафик через VPN")
+        Panel {
+            listOf("Сегодня" to traffic.today, "За месяц" to traffic.month, "Всего" to traffic.total).forEach { (label, bytes) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, style = Type.body, modifier = Modifier.weight(1f))
+                    Text(Controller.formatBytes(bytes), style = Type.bodyStrong)
+                }
+            }
+            Text(
+                "Всё, что прошло через серверы VPN. Сайты и приложения «напрямую» сюда не входят.",
+                style = Type.caption, color = Palette.muted, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+            )
+            if (traffic.total > 0) ChipButton("Обнулить счётчик", false) { c.resetTraffic() }
+        }
+
         SectionLabel("Защита")
         Panel {
             SettingRow(
@@ -331,7 +347,9 @@ private fun SettingRow(title: String, sub: String, onClick: () -> Unit) {
 
 private fun subLine(s: Subscription): String {
     val parts = mutableListOf("${s.nodes.size} ${plural(s.nodes.size, "сервер", "сервера", "серверов")}")
+    // Расход из подписки (заголовок Subscription-Userinfo, как в Happ): по всем устройствам этой подписки.
     if (s.total > 0) parts += "${Controller.formatBytes(s.upload + s.download)} из ${Controller.formatBytes(s.total)}"
+    else if (s.upload + s.download > 0) parts += "израсходовано ${Controller.formatBytes(s.upload + s.download)}"
     if (s.expire > 0) parts += "до " + SimpleDateFormat("d MMMM", Locale.forLanguageTag("ru")).format(Date(s.expire * 1000))
     if (s.updatedAt > 0) parts += "обновлена " + SimpleDateFormat("d.MM HH:mm", Locale.forLanguageTag("ru")).format(Date(s.updatedAt))
     return parts.joinToString(", ")

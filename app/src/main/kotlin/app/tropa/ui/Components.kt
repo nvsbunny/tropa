@@ -119,6 +119,8 @@ object Icons {
     val close = stroke("M6 6l12 12M18 6 6 18", width = 2f)
     val log = stroke("M6 4h12v16H6z", "M9 9h6M9 13h6M9 17h3")
     val lock = stroke("M6 11h12v9H6z", "M8.5 11V8a3.5 3.5 0 0 1 7 0v3")
+    /** Автоматика: молния, сервер выбирают за вас. */
+    val auto = stroke("M13 3 6 13h5l-1 8 7-10h-5z")
 }
 
 @Composable

@@ -18,6 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +48,9 @@ fun HomeScreen(
     val delays by c.delays.collectAsState()
     val activeId by c.activeId.collectAsState()
     val speed by c.speed.collectAsState()
+    val traffic by c.traffic.collectAsState()
+    var picking by remember { mutableStateOf(false) }
+    if (picking) ServerSheet(c) { picking = false }
     val on = status is CoreState.Status.On
     val current = remember3(subs, delays, activeId, settings) { c.currentNode() }
     val totalNodes = subs.sumOf { it.nodes.size }
@@ -113,7 +119,7 @@ fun HomeScreen(
         Spacer(8.dp)
         Panel {
             Row(
-                Modifier.fillMaxWidth().clickable(onClickLabel = "Выбрать сервер", onClick = onOpenServers),
+                Modifier.fillMaxWidth().clickable(onClickLabel = "Выбрать страну или сервер") { picking = true },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -150,10 +156,17 @@ fun HomeScreen(
                     modifier = Modifier.padding(top = 10.dp),
                 )
             }
-            if (on) {
+            if (on || traffic.month > 0) {
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("↓ ${Controller.formatSpeed(speed.second)}", style = Type.caption, color = Palette.muted)
-                    Text("↑ ${Controller.formatSpeed(speed.first)}", style = Type.caption, color = Palette.muted)
+                    if (on) {
+                        Text("↓ ${Controller.formatSpeed(speed.second)}", style = Type.caption, color = Palette.muted)
+                        Text("↑ ${Controller.formatSpeed(speed.first)}", style = Type.caption, color = Palette.muted)
+                    }
+                    if (traffic.month > 0) Text(
+                        "Сегодня ${Controller.formatBytes(traffic.today)} · месяц ${Controller.formatBytes(traffic.month)}",
+                        style = Type.caption, color = Palette.muted, textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
             if (settings.mergeSubs || subs.size == 1) {
@@ -284,7 +297,9 @@ private fun PlanRow(s: Subscription, showTitle: Boolean = true) {
                 drawStopIndicator = {},
             )
         } else {
-            Text("Безлимит", style = Type.caption, color = Palette.muted)
+            // Провайдер сообщает расход и у безлимита (как показывает Happ): это по всем устройствам подписки.
+            val used = s.upload + s.download
+            Text(if (used > 0) "Безлимит · ${Controller.formatBytes(used)}" else "Безлимит", style = Type.caption, color = Palette.muted)
         }
         Box {
             Text(

@@ -114,6 +114,7 @@ class Store(context: Context) {
                     put("lastError", s.lastError)
                     put("routing", s.routing)
                     put("groupType", s.groupType)
+                    put("groupName", s.groupName)
                     put("sendHwid", s.sendHwid)
                     put("groupMembers", JSONArray(s.groupMembers))
                     put("nodes", JSONArray().apply {
@@ -175,6 +176,7 @@ class Store(context: Context) {
                 lastError = o.optString("lastError"),
                 routing = o.optString("routing"),
                 groupType = o.optString("groupType"),
+                groupName = o.optString("groupName"),
                 sendHwid = o.optBoolean("sendHwid", false),
                 groupMembers = o.optJSONArray("groupMembers")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
                 nodes = (0 until nodes.length()).map { j ->

@@ -15,6 +15,7 @@ object SubscriptionParser {
         /** Главная группа провайдера: как он сам выбирает сервер. */
         val groupType: String = "",
         val groupMembers: List<String> = emptyList(),
+        val groupName: String = "",
         /** Маршруты провайдера из Xray JSON, в формате профиля Happ/INCY. */
         val routing: String = "",
         /** Записи-заглушки провайдера (адрес 0.0.0.0, порт 1): это сообщения, а не серверы. */
@@ -31,7 +32,8 @@ object SubscriptionParser {
             if (!proxies.isNullOrEmpty()) {
                 val nodes = toNodes(proxies, subId)
                 val (type, members) = mainGroup(root, nodes)
-                return Result(nodes, 0, groupType = type, groupMembers = members, notes = stubNotes(proxies))
+                val name = ((root["proxy-groups"] as? List<*>)?.firstOrNull() as? Map<*, *>)?.get("name")?.toString().orEmpty()
+                return Result(nodes, 0, groupType = type, groupMembers = members, notes = stubNotes(proxies), groupName = if (type.isEmpty()) "" else name)
             }
         }
 
@@ -46,6 +48,7 @@ object SubscriptionParser {
                 return Result(
                     nodes, 0, routing = parsed.routing, notes = stubNotes(parsed.proxies),
                     groupType = parsed.groupType, groupMembers = if (parsed.groupType.isEmpty()) emptyList() else nodes.map { it.id },
+                    groupName = parsed.groupName,
                 )
             }
         }

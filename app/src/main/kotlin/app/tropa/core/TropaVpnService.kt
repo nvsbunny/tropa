@@ -64,6 +64,20 @@ class TropaVpnService : VpnService() {
     }
 
     private var refreshJob: kotlinx.coroutines.Job? = null
+    private var trafficJob: kotlinx.coroutines.Job? = null
+
+    /** Каждые 10 секунд записываем, сколько прошло через серверы (см. [TrafficMeter]). */
+    private fun meterTraffic() {
+        trafficJob?.cancel()
+        TrafficMeter.coreStarted()
+        trafficJob = scope.launch {
+            while (true) {
+                delay(10_000)
+                val api = CoreState.api ?: continue
+                runCatching { api.traffic() }.onSuccess { (up, down) -> TrafficMeter.sample(this@TropaVpnService, up + down) }
+            }
+        }
+    }
 
     /**
      * Пока VPN включён, сервис и так живёт, поэтому подписки обновляем здесь,
@@ -271,6 +285,7 @@ class TropaVpnService : VpnService() {
                     if (rootMode) watchRoot(log) else watchProcess()
                     watchNetwork()
                     keepSubscriptionsFresh()
+                    meterTraffic()
                     return
                 }
                 if (!rootMode && process?.isAlive != true) {
@@ -417,6 +432,8 @@ class TropaVpnService : VpnService() {
         unwatchNetwork()
         refreshJob?.cancel()
         refreshJob = null
+        trafficJob?.cancel()
+        trafficJob = null
         cleanup()
         CoreState.set(status)
         stopForeground(STOP_FOREGROUND_REMOVE)

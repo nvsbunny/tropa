@@ -70,7 +70,13 @@ class Controller(private val context: Context, val store: Store) {
     private var liveJob: Job? = null
     private var reloadJob: Job? = null
 
+    /** Сколько прошло через серверы VPN: сегодня, за месяц, всего. */
+    val traffic = app.tropa.core.TrafficMeter.stats
+
+    fun resetTraffic() = app.tropa.core.TrafficMeter.reset(context)
+
     init {
+        app.tropa.core.TrafficMeter.load(context)
         // Отклик из свежей проверки качества точнее грубого TCP-пинга — начинаем с него.
         store.quality.value.takeIf { it.fresh }?.let { q ->
             _delays.value = q.byId.mapValues { it.value.delay }

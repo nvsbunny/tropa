@@ -15,7 +15,7 @@ object XrayJson {
      * с балансировщиком по обычным серверам («Лучший сервер» — leastLoad,
      * то есть по отклику). Балансировщик только из LTE («Авто-выбор LTE») не в счёт.
      */
-    data class Parsed(val proxies: List<Map<String, Any?>>, val routing: String, val groupType: String = "")
+    data class Parsed(val proxies: List<Map<String, Any?>>, val routing: String, val groupType: String = "", val groupName: String = "")
 
     fun parse(text: String): Parsed? {
         val t = text.trim()
@@ -38,6 +38,7 @@ object XrayJson {
                 ?: return@mapNotNull null
             outbound(ob, cfg.optString("remarks").ifBlank { cfg.optString("name") }, chainOf(ob, list))
         }
+        var groupName = ""
         val groupType = configs.firstNotNullOfOrNull { cfg ->
             val balancer = cfg.optJSONObject("routing")?.optJSONArray("balancers")?.optJSONObject(0) ?: return@firstNotNullOfOrNull null
             val outs = cfg.optJSONArray("outbounds") ?: return@firstNotNullOfOrNull null
@@ -45,6 +46,7 @@ object XrayJson {
                 .filter { it.optString("protocol") in supported }.map { it.optString("tag") }
             val name = cfg.optString("remarks")
             if (tags.isEmpty() || tags.all { it.contains("lte", true) } || name.contains("lte", true)) return@firstNotNullOfOrNull null
+            groupName = name
             when (balancer.optJSONObject("strategy")?.optString("type")) {
                 "leastLoad", "leastPing" -> "url-test"
                 "random", "roundRobin" -> "load-balance"
@@ -54,7 +56,7 @@ object XrayJson {
         // Маршруты берём у обычного сервера, а если таких нет — у любой записи.
         val plain = configs.filter { (it.optJSONObject("routing")?.optJSONArray("balancers")?.length() ?: 0) == 0 }
         val routing = (plain + configs).firstNotNullOfOrNull { routingProfile(it) }.orEmpty()
-        return Parsed(proxies, routing, groupType)
+        return Parsed(proxies, routing, groupType, groupName)
     }
 
     private val supported = setOf("vless", "vmess", "trojan", "shadowsocks", "hysteria", "hysteria2")
