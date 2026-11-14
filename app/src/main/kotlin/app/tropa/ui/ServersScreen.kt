@@ -207,7 +207,7 @@ private fun choiceNote(d: ServerListData, providerSub: Subscription?): String = 
         "Чтобы вернуть автоматику, выберите строку ниже."
 }
 
-/** Автоматика сверху списка: «Тропа выбирает сама» и своя группа у каждого провайдера, как у Cats «Автовыбор». */
+/** Автоматика сверху списка: «Тропа выбирает сама» и своя группа у каждого провайдера («Автовыбор», «Лучший сервер»). */
 private fun androidx.compose.foundation.lazy.LazyListScope.autoChoices(d: ServerListData, c: Controller, onPicked: () -> Unit) {
     val settings = d.settings
     val providerSub = d.subs.firstOrNull { it.id == settings.providerSubId } ?: d.subs.firstOrNull()
