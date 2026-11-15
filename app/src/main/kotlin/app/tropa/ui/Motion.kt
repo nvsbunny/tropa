@@ -14,6 +14,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -30,6 +38,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -86,103 +95,138 @@ import kotlin.math.roundToInt
 /** Одна кривая движения на всё приложение: быстрый старт, мягкая посадка. */
 val Settle = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
 
+/** Кривая «ease» из CSS: так движется выключатель в образце. */
+val CssEase = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
+
 /** Резкая кривая для «щелчков»: части кнопки, перекат подписи. */
 val Snap = CubicBezierEasing(0.83f, 0f, 0.17f, 1f)
 
 // ---------- ползунок подключения ----------
 
 /**
- * Длинный выключатель: вдавленная дорожка и светлая ручка с надписью «VPN включён / выключен».
- * Сбоку от ручки видно цвет состояния: синий — включён, красный — выключен; при перетаскивании
- * граница цветов едет вместе с ручкой. Нажатие в любом месте переключает, ручку можно и сдвинуть.
+ * Выключатель VPN по образцу (Shoh2008, uiverse.io, MIT): серый ободок, вдавленная цветная полоса
+ * и выпуклая светлая ручка. Надписи стоят на месте: «ВЫКЛ» справа на красном, «ВКЛ» слева на синем.
+ * При нажатии ручка переезжает и закрывает одну надпись, открывая другую. Движение — 0,25 с, «ease».
  */
 @Composable
 fun ConnectSwitch(on: Boolean, busy: Boolean, onToggle: (Boolean) -> Unit) {
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    BoxWithConstraints(
-        Modifier
-            .fillMaxWidth()
-            .height(66.dp)
-            .clip(CircleShape)
-            .background(Palette.track)
-            .semantics {
-                role = Role.Switch
-                toggleableState = ToggleableState(on)
-                contentDescription = "VPN"
-                stateDescription = if (on) "включён" else "выключен"
-            }
-    ) {
-        val pad = 4.dp
-        val knobW = maxWidth * 0.66f
-        val maxPx = with(density) { (maxWidth - knobW - pad * 2).toPx() }
-        val x = remember { Animatable(if (on) maxPx else 0f) }
-        LaunchedEffect(on, maxPx) { x.animateTo(if (on) maxPx else 0f, spring(dampingRatio = 0.72f, stiffness = 420f)) }
-        val knobPx = with(density) { (knobW + pad * 2).toPx() }
-
-        // Цвет состояния только на открытой части дорожки: слева от ручки синий, справа красный.
-        // Под ручкой и в зазоре вокруг неё — сама дорожка, без каймы.
-        Canvas(Modifier.matchParentSize()) {
-            drawRect(Palette.vpnOn, size = Size(x.value, size.height))
-            drawRect(Palette.vpnOff, topLeft = Offset(x.value + knobPx, 0f), size = Size((size.width - x.value - knobPx).coerceAtLeast(0f), size.height))
-            // Вдавленность: тень сверху и блик снизу, как у настоящего выключателя.
-            drawRect(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.28f), 0.45f to Color.Transparent, 1f to Color.White.copy(alpha = 0.18f)))
-        }
+    // Пока подключаемся — открытая надпись мягко мигает.
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(busy) {
+        if (busy) while (true) { pulse.animateTo(0.35f, tween(450)); pulse.animateTo(1f, tween(450)) }
+        else pulse.animateTo(1f, tween(150))
+    }
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        // Ободок: серая рамка, сверху темнее, снизу светлее — как у настоящей клавиши в корпусе.
         Box(
             Modifier
-                .matchParentSize()
-                .pointerInput(on) {
-                    detectTapGestures {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggle(!on)
-                    }
-                }
-                .pointerInput(on, maxPx) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            val target = x.value > maxPx / 2
-                            scope.launch { x.animateTo(if (target) maxPx else 0f, spring(dampingRatio = 0.72f, stiffness = 420f)) }
-                            if (target != on) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onToggle(target)
-                            }
-                        },
-                        onDragCancel = { scope.launch { x.animateTo(if (on) maxPx else 0f) } },
-                    ) { change, dx ->
-                        change.consume()
-                        scope.launch { x.snapTo((x.value + dx).coerceIn(0f, maxPx)) }
-                    }
-                }
-        )
-        val lamp by animateColorAsState(if (on) Palette.vpnOn else Color(0xFFB9B5AB), tween(400), label = "lamp")
-        val glow by animateFloatAsState(if (on || busy) 1f else 0f, tween(500), label = "glow")
-        Row(
-            Modifier
-                .padding(pad)
-                .offset { IntOffset(x.value.roundToInt(), 0) }
-                .width(knobW)
-                .fillMaxHeight()
-                .shadow(6.dp, CircleShape)
+                .fillMaxWidth()
+                .height(84.dp)
+                .shadow(2.dp, CircleShape, clip = false)
                 .clip(CircleShape)
-                .background(Brush.verticalGradient(listOf(Color(0xFFFCFBF8), Color(0xFFE9E5DC)))),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
+                .background(Brush.verticalGradient(if (Palette.dark) listOf(Color(0xFF0C0C0C), Color(0xFF1A1A19), Color(0xFF2E2D2B)) else listOf(Color(0xFF8E8E8E), Color(0xFFBDBDBD), Color(0xFFE2E2E2))))
+                .padding(3.dp)
+                .semantics {
+                    role = Role.Switch
+                    toggleableState = ToggleableState(on)
+                    contentDescription = "VPN"
+                    stateDescription = if (busy) "подключаемся" else if (on) "включён" else "выключен"
+                }
         ) {
-            Box(
-                Modifier.size(9.dp).graphicsLayer { alpha = if (busy) 0.5f + 0.5f * glow else 1f }
-                    .shadow((6 * glow).dp, CircleShape, ambientColor = lamp, spotColor = lamp)
-                    .clip(CircleShape).background(lamp)
-            )
-            Text(
-                when {
-                    busy -> "Подключаемся…"
-                    on -> "VPN включён"
-                    else -> "VPN выключен"
-                },
-                // Ручка всегда светлая, как настоящая клавиша: текст тёмный в любой теме.
-                style = Type.bodyStrong, color = Color(0xFF232323), modifier = Modifier.padding(start = 10.dp),
-            )
+            BoxWithConstraints(Modifier.fillMaxSize().clip(CircleShape)) {
+                // Ручка — прежнего размера, полоса — во всю ширину экрана.
+                val knobW = 129.dp
+                val maxPx = with(density) { (maxWidth - knobW).toPx() }
+                val knobPx = with(density) { knobW.toPx() }
+                val x = remember { Animatable(if (on) maxPx else 0f) }
+                LaunchedEffect(on, maxPx) { x.animateTo(if (on) maxPx else 0f, tween(250, easing = CssEase)) }
+
+                Canvas(Modifier.matchParentSize()) {
+                    // Граница синего и красного всегда под ручкой.
+                    val seam = x.value + knobPx / 2
+                    drawRect(Palette.vpnOn, size = Size(seam, size.height))
+                    drawRect(Palette.vpnOff, topLeft = Offset(seam, 0f), size = Size(size.width - seam, size.height))
+                    // Вдавленность: тень сверху, свет снизу, тёмный край по кругу.
+                    drawRect(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.42f), 0.3f to Color.Black.copy(alpha = 0.10f), 0.65f to Color.Transparent, 1f to Color.White.copy(alpha = 0.14f)))
+                    drawRoundRect(Color.Black.copy(alpha = 0.30f), cornerRadius = CornerRadius(size.height / 2), style = Stroke(2.dp.toPx()))
+                }
+                // Надписи на месте, по центру своей цветной части; ручка их закрывает.
+                val textStyle = Type.heading.copy(
+                    letterSpacing = TextUnit(2f, TextUnitType.Sp),
+                    shadow = Shadow(Color.Black.copy(alpha = 0.30f), Offset(0f, 2f), 4f),
+                )
+                // Каждая надпись видна только по свою сторону от ручки: ручка наезжает и закрывает её.
+                Box(
+                    Modifier.matchParentSize().drawWithContent { clipRect(right = x.value) { this@drawWithContent.drawContent() } }
+                        .padding(end = knobW),
+                    contentAlignment = Alignment.Center,
+                ) { Text("ВКЛ", style = textStyle, color = Color.White, maxLines = 1, modifier = Modifier.graphicsLayer { alpha = pulse.value }) }
+                Box(
+                    Modifier.matchParentSize().drawWithContent { clipRect(left = x.value + knobPx) { this@drawWithContent.drawContent() } }
+                        .padding(start = knobW),
+                    contentAlignment = Alignment.Center,
+                ) { Text("ВЫКЛ", style = textStyle, color = Color.White, maxLines = 1, modifier = Modifier.graphicsLayer { alpha = pulse.value }) }
+                // Ручка: выпуклая, во всю высоту полосы, с бликом сверху и тенью на цветную часть.
+                Box(
+                    Modifier
+                        .offset { IntOffset(x.value.roundToInt(), 0) }
+                        .width(knobW)
+                        .fillMaxHeight()
+                        .shadow(8.dp, CircleShape)
+                        .clip(CircleShape)
+                        // В тёмной теме ручка графитовая — того же цвета, что карточка в светлой.
+                        .background(Brush.verticalGradient(if (Palette.dark) listOf(Color(0xFF4A4945), Color(0xFF353431), Color(0xFF232323)) else listOf(Color(0xFFFDFDFD), Color(0xFFEFEFEF), Color(0xFFD2D2D2))))
+                ) {
+                    Canvas(Modifier.matchParentSize()) {
+                        val r = CornerRadius(size.height / 2)
+                        drawRoundRect(if (Palette.dark) Color.Black.copy(alpha = 0.6f) else Color(0xFF9A9A9A).copy(alpha = 0.55f), cornerRadius = r, style = Stroke(1.dp.toPx()))
+                        val i = 3.dp.toPx()
+                        drawRoundRect(
+                            Brush.verticalGradient(0f to Color.White.copy(alpha = if (Palette.dark) 0.28f else 1f), 0.5f to Color.White.copy(alpha = 0f)),
+                            topLeft = Offset(i, i), size = Size(size.width - 2 * i, size.height - 2 * i),
+                            cornerRadius = CornerRadius((size.height - 2 * i) / 2), style = Stroke(1.5.dp.toPx()),
+                        )
+                        drawRoundRect(Brush.verticalGradient(0.8f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.18f)), cornerRadius = r, style = Stroke(2.dp.toPx()))
+                        // Тени по краям: закруглённые концы ручки темнее, середина светлая — ручка выглядит объёмной.
+                        drawRoundRect(
+                            Brush.horizontalGradient(
+                                0f to Color.Black.copy(alpha = 0.16f), 0.2f to Color.Transparent,
+                                0.8f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.16f),
+                            ),
+                            cornerRadius = r,
+                        )
+                    }
+                }
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .pointerInput(on) {
+                            detectTapGestures {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onToggle(!on)
+                            }
+                        }
+                        .pointerInput(on, maxPx) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    val target = x.value > maxPx / 2
+                                    scope.launch { x.animateTo(if (target) maxPx else 0f, tween(250, easing = CssEase)) }
+                                    if (target != on) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onToggle(target)
+                                    }
+                                },
+                                onDragCancel = { scope.launch { x.animateTo(if (on) maxPx else 0f) } },
+                            ) { change, dx ->
+                                change.consume()
+                                scope.launch { x.snapTo((x.value + dx).coerceIn(0f, maxPx)) }
+                            }
+                        }
+                )
+            }
         }
     }
 }
@@ -212,7 +256,7 @@ fun NavItem(
     }
     Column(
         modifier
-            .heightIn(min = 58.dp)
+            .height(60.dp)
             .clip(RoundedCornerShape(16.dp))
             .semantics { this.selected = selected; contentDescription = label }
             .onGloballyPositioned { c -> onCenter(c.positionInRoot() + Offset(c.size.width / 2f, c.size.height / 2f)) }
@@ -224,13 +268,12 @@ fun NavItem(
         Box(Modifier.size(26.dp).graphicsLayer { translationY = hop.value * density }, contentAlignment = Alignment.Center) {
             glyph(tint, selected)
         }
-        AnimatedVisibility(
-            selected,
-            enter = fadeIn(tween(220)) + expandVertically(tween(260, easing = Settle)),
-            exit = fadeOut(tween(120)) + shrinkVertically(tween(200)),
-        ) {
-            Text(label, style = Type.tiny, color = tint, modifier = Modifier.padding(top = 3.dp))
-        }
+        // Под подпись место есть всегда: появляется она прозрачностью и сдвигом, высота меню не меняется.
+        val shown by animateFloatAsState(if (selected) 1f else 0f, tween(260, easing = Settle), label = "label")
+        Text(
+            label, style = Type.tiny, color = tint, maxLines = 1,
+            modifier = Modifier.padding(top = 3.dp).graphicsLayer { alpha = shown; translationY = (1f - shown) * 6f * density },
+        )
     }
 }
 

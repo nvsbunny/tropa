@@ -98,4 +98,6 @@ data class Settings(
     val rootMode: Boolean = false,
     /** Экран серверов: порядок, заданный провайдером, вместо сортировки по отклику. */
     val providerOrder: Boolean = false,
+    /** Провайдер по умолчанию: его вкладка на главной первая, его порядок — в режиме «как у провайдера». */
+    val favoriteSubId: String = "",
 )

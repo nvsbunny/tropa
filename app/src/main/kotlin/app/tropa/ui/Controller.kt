@@ -294,12 +294,13 @@ class Controller(private val context: Context, val store: Store) {
                 (inCountry.filter { (d[it.second.id] ?: 0) > 0 }.minByOrNull { d[it.second.id]!! } ?: inCountry.firstOrNull())?.let { return it }
             }
         }
-        // VPN выключен: показываем, что будет выбрано. LTE, мосты и служебные серверы
-        // на Wi-Fi не выбираются, поэтому и здесь их не предлагаем.
+        // VPN выключен: показываем, что будет выбрано. На Wi-Fi — обычные серверы (LTE, мосты
+        // и служебные там не выбираются), на мобильной сети — LTE-серверы, как и берёт ядро.
         val d = _delays.value
         val activeSub = store.subs.value.firstOrNull { it.id == s.providerSubId } ?: store.subs.value.firstOrNull()
         val inScope = if (s.mergeSubs) all else all.filter { it.first.id == activeSub?.id }.ifEmpty { all }
-        val usable = inScope.filter { Names.kind(it.second.name) == Names.Kind.NORMAL }.ifEmpty { inScope }
+        val wantKind = if (onMobileNetwork() && inScope.any { Names.kind(it.second.name) == Names.Kind.MOBILE }) Names.Kind.MOBILE else Names.Kind.NORMAL
+        val usable = inScope.filter { Names.kind(it.second.name) == wantKind }.ifEmpty { inScope }
         val alive = usable.filter { (d[it.second.id] ?: 1) != 0 }.ifEmpty { usable }
         if (s.choice == ServerChoice.AUTO) {
             return alive.filter { (d[it.second.id] ?: 0) > 0 }.minByOrNull { d[it.second.id]!! } ?: alive.first()
@@ -451,6 +452,32 @@ class Controller(private val context: Context, val store: Store) {
     fun setAdvanced(enabled: Boolean) = store.updateSettings { it.copy(advanced = enabled) }
 
     fun setTheme(theme: String) = store.updateSettings { it.copy(theme = theme) }
+
+    /** Провайдер по умолчанию: первый на главной и рабочий в режиме «как у провайдера». */
+    fun setFavoriteSub(id: String) {
+        store.updateSettings { it.copy(favoriteSubId = id, providerSubId = id) }
+        if (CoreState.isOn) scheduleReload()
+    }
+
+    /** Вкладки провайдеров на главной: провайдер по умолчанию — первым. */
+    fun providerTabs(): List<Subscription> {
+        val fav = store.settings.value.favoriteSubId
+        return store.subs.value.filter { it.nodes.isNotEmpty() }.sortedBy { if (it.id == fav) 0 else 1 }
+    }
+
+    /**
+     * Пять серверов провайдера для быстрого выбора. На Wi-Fi — самые отзывчивые обычные;
+     * на мобильной сети — LTE-серверы (их узнаём по названию), тоже по отклику.
+     * Неизмеренные — после измеренных, неответившие — в конце.
+     */
+    fun quickPicks(sub: Subscription, mobile: Boolean): List<Pair<Subscription, Node>> {
+        val d = _delays.value
+        val hasLte = sub.nodes.any { Names.kind(it.name) == Names.Kind.MOBILE }
+        val kind = if (mobile && hasLte) Names.Kind.MOBILE else Names.Kind.NORMAL
+        return sub.nodes.filter { Names.kind(it.name) == kind }
+            .sortedWith(compareBy({ n -> d[n.id].let { if (it == null) 1 else if (it > 0) 0 else 2 } }, { n -> d[n.id]?.takeIf { it > 0 } ?: Int.MAX_VALUE }))
+            .take(5).map { sub to it }
+    }
 
     fun setProviderOrder(enabled: Boolean) = store.updateSettings { it.copy(providerOrder = enabled) }
 

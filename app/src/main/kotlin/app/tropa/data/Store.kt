@@ -103,6 +103,7 @@ class Store(context: Context) {
             put("rootMode", s.rootMode)
             put("theme", s.theme)
             put("providerOrder", s.providerOrder)
+            put("favoriteSubId", s.favoriteSubId)
         })
         root.put("subs", JSONArray().apply {
             _subs.value.forEach { s ->
@@ -163,6 +164,7 @@ class Store(context: Context) {
                 rootMode = o.optBoolean("rootMode", false),
                 theme = o.optString("theme", "light"),
                 providerOrder = o.optBoolean("providerOrder", false),
+                favoriteSubId = o.optString("favoriteSubId"),
             )
         }
         val arr = root.optJSONArray("subs") ?: return

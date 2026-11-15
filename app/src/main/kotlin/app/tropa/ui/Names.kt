@@ -23,6 +23,9 @@ object Names {
      * Название подписки: значок провайдера в начале («🐾 Котики VPN») оставляем —
      * по нему подписку узнают, как в INCY. Остальное чистим как обычно.
      */
+    /** Короткое имя для вкладки: «Название» вместо «Название - сайт.провайдера». */
+    fun shortSub(title: String): String = subTitle(title).substringBefore(" - ").substringBefore(" — ").trim()
+
     fun subTitle(title: String): String {
         val t = title.trim()
         val firstWord = t.indexOfFirst { Character.isLetterOrDigit(it) }.let { if (it < 0) t.length else it }

@@ -102,6 +102,21 @@ fun SettingsScreen(c: Controller, onAddSub: () -> Unit, onSendToTv: () -> Unit =
             }
         }
 
+        val withServers = subs.filter { it.nodes.isNotEmpty() }
+        if (withServers.size > 1) {
+            Panel(Modifier.padding(bottom = 10.dp)) {
+                Text("Провайдер по умолчанию", style = Type.body)
+                Text("Его серверы первыми на главной, и его порядком Тропа идёт в режиме «как у провайдера»", style = Type.caption, color = Palette.muted)
+                Row(
+                    Modifier.padding(top = 10.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val fav = settings.favoriteSubId.takeIf { id -> withServers.any { it.id == id } } ?: withServers.first().id
+                    withServers.forEach { s -> ChipButton(Names.shortSub(s.title), s.id == fav) { c.setFavoriteSub(s.id) } }
+                }
+            }
+        }
+
         val traffic by c.traffic.collectAsState()
         SectionLabel("Трафик через VPN")
         Panel {

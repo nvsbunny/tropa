@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -81,6 +83,9 @@ fun HomeScreen(
         Spacer(10.dp)
         ExitCard(c, current, on, status, delays[current?.second?.id], settings.choice, traffic, speed) { picking = true }
 
+        val rough by c.rough.collectAsState()
+        QuickPick(c, subs, settings.favoriteSubId, delays, rough, current?.second?.id, settings.choice, c.onMobileNetwork()) { picking = true }
+
         (update as? app.tropa.core.Updater.State.Available)?.let { u ->
             Spacer(14.dp)
             Panel(Modifier.clip(RoundedCornerShape(18.dp)).clickable(onClickLabel = "Обновить", onClick = onOpenSettings)) {
@@ -95,7 +100,7 @@ fun HomeScreen(
             }
         }
 
-        Spacer(14.dp)
+        Spacer(6.dp)
         RouteSummary(settings.mode, settings.directApps.size + settings.customSites.size, onOpenRoutes)
         if (subs.size > 1) MergeRow(settings.mergeSubs) { c.setMerge(it) }
         if (settings.mergeSubs || subs.size == 1) {
@@ -243,6 +248,88 @@ private fun ExitCard(
     }
 }
 
+/**
+ * Быстрый выбор под карточкой: вкладки провайдеров (провайдер по умолчанию — первым)
+ * и по пять серверов. На Wi-Fi — самые отзывчивые, на мобильной сети — LTE-серверы.
+ * Нажали строку — этот сервер выбран; остальное — в шторке «Все серверы».
+ */
+@Composable
+private fun QuickPick(
+    c: Controller,
+    subs: List<Subscription>,
+    favorite: String,
+    delays: Map<String, Int>,
+    rough: Set<String>,
+    currentId: String?,
+    choice: ServerChoice,
+    mobile: Boolean,
+    onMore: () -> Unit,
+) {
+    val tabs = remember(subs, favorite) { c.providerTabs() }
+    if (tabs.isEmpty()) return
+    var tabId by remember(favorite) { mutableStateOf(tabs.first().id) }
+    val sub = tabs.firstOrNull { it.id == tabId } ?: tabs.first()
+    val picks = remember(sub, delays, mobile) { c.quickPicks(sub, mobile) }
+    val lte = picks.any { Names.kind(it.second.name) == Names.Kind.MOBILE }
+    // Сменилась сеть (Wi-Fi ↔ LTE) — меряем отклик заново: на мобильной меряются и LTE-серверы.
+    LaunchedEffect(mobile) { c.testAll() }
+
+    Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 22.dp), verticalAlignment = Alignment.Bottom) {
+        Text(if (lte) "LTE-серверы" else "Страны", style = Type.heading, modifier = Modifier.weight(1f))
+        Text(if (lte) "для мобильной сети" else "лучшие по отклику", style = Type.caption, color = Palette.muted)
+    }
+    if (tabs.size > 1) {
+        Row(
+            Modifier.padding(top = 10.dp).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            tabs.forEach { s -> ChipButton(Names.shortSub(s.title), s.id == sub.id) { tabId = s.id } }
+        }
+    }
+    Column(Modifier.padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Palette.s1)) {
+        if (picks.isEmpty()) {
+            Text("У провайдера нет подходящих серверов", style = Type.small, color = Palette.muted, modifier = Modifier.padding(16.dp))
+        }
+        picks.forEachIndexed { i, (_, node) ->
+            if (i > 0) androidx.compose.material3.HorizontalDivider(color = Palette.line.copy(alpha = 0.6f), thickness = 1.dp, modifier = Modifier.padding(start = 60.dp))
+            val d = delays[node.id]
+            val picked = node.id == currentId
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                    .clickable(onClickLabel = "Выбрать этот сервер") { c.selectNode(node.id) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Flag(Names.country(node.name), size = 28.dp)
+                // Заголовок уже говорит «LTE-серверы»: пометку LTE/4G из названия убираем, чтобы влез номер.
+                val name = Names.serverName(node.name).let { n ->
+                    if (!lte) n else n.replace(Regex("""\(?LTE(?:/4G)?\)?""", RegexOption.IGNORE_CASE), "").replace(Regex("""\s{2,}"""), " ").trim().ifEmpty { n }
+                }
+                Text(
+                    name, style = if (picked) Type.bodyStrong else Type.body,
+                    color = if (d == 0) Palette.muted else Palette.text,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+                if (picked) Pill(if (choice == ServerChoice.MANUAL) "выбран" else "сейчас")
+                Text(
+                    (if (node.id in rough) "≈ " else "") + delayText(d),
+                    style = Type.captionStrong, color = if (d == 0) Palette.muted else Palette.text,
+                )
+            }
+        }
+    }
+    Row(
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Открыть все серверы", onClick = onMore)
+            .padding(horizontal = 6.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("Все серверы и автовыбор", style = Type.captionStrong, color = Palette.vpn)
+        Ico(Icons.chevron, tint = Palette.vpn, size = 16.dp)
+    }
+}
+
 /** Переключатель «Объединять подписки». */
 @Composable
 private fun MergeRow(merge: Boolean, onChange: (Boolean) -> Unit) {
@@ -337,7 +424,7 @@ private fun PlanRow(s: Subscription, showTitle: Boolean = true) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(if (showTitle) s.title else "Трафик", style = Type.caption, color = Palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(if (showTitle) Names.shortSub(s.title) else "Трафик", style = Type.caption, color = Palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         if (s.total > 0) {
             val used = (s.upload + s.download).toFloat() / s.total
             LinearProgressIndicator(
