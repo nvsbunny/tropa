@@ -232,6 +232,24 @@ private val flags: Map<String, FlagSpec> = mapOf(
     "RS" to FlagSpec(listOf(Color(0xFFC8303A), Color(0xFF2B4A93), Color(0xFFF4F6F8))),
 )
 
+/**
+ * Цвет флага страны [code] в точке (x, y) в долях от 0 до 1 — для флага из знаков.
+ * Те же описания, что у круглых флажков; неизвестная страна — null.
+ */
+fun flagColorAt(code: String?, x: Float, y: Float): Color? {
+    val spec = code?.let { flags[it] } ?: return null
+    if (code == "JP") return if ((x - .5f) * (x - .5f) * 3.2f + (y - .5f) * (y - .5f) < .07f) Color(0xFFC8303A) else spec.colors[0]
+    spec.cross?.let { c ->
+        val nordic = code != "CH" && code != "GB" && code != "GE"
+        val cx = if (nordic) .36f else .5f
+        if (kotlin.math.abs(y - .5f) < .1f || kotlin.math.abs(x - cx) < .065f) return c
+    }
+    if (code == "US" && x < .42f && y < .54f) return Color(0xFF2B4A93)
+    val n = spec.colors.size
+    val i = ((if (spec.vertical) x else y) * n).toInt().coerceIn(0, n - 1)
+    return spec.colors[i]
+}
+
 /** Упрощённый круглый флаг. Неизвестная страна — кружок с кодом. */
 @Composable
 fun Flag(code: String?, size: Dp = 30.dp) {

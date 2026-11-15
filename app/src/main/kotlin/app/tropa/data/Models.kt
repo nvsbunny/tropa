@@ -92,6 +92,8 @@ data class Settings(
     val notification: Boolean = true,
     /** Ставить обновления Тропы самой (по Wi-Fi, когда экран погашен). */
     val autoUpdate: Boolean = true,
+    /** Тема: light, dark или system (как в телефоне). */
+    val theme: String = "light",
     /** Root-режим «для опытных»: TPROXY и iptables вместо VPN. */
     val rootMode: Boolean = false,
     /** Экран серверов: порядок, заданный провайдером, вместо сортировки по отклику. */

@@ -48,6 +48,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
@@ -55,6 +59,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.tropa.TropaApp
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 import app.tropa.core.CoreState
 import app.tropa.core.TropaVpnService
 
@@ -72,7 +78,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        applyTheme(controller.store.settings.value.theme)
+        // Тема меняется из настроек на лету: перекрашиваем и значки в строке состояния.
+        lifecycleScope.launch {
+            controller.store.settings.collect { applyTheme(it.theme) }
+        }
         handleIntent(intent)
         if (Build.VERSION.SDK_INT >= 33) notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         setContent { TropaTheme { App() } }
@@ -151,6 +161,15 @@ class MainActivity : ComponentActivity() {
         if (prepare != null) vpnPermission.launch(prepare) else controller.connect()
     }
 
+    /** Светлая, тёмная или как в телефоне; значки строки состояния — под цвет фона. */
+    private fun applyTheme(theme: String) {
+        val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        Palette.dark = when (theme) { "dark" -> true; "system" -> systemDark; else -> false }
+        val t = android.graphics.Color.TRANSPARENT
+        val style = if (Palette.dark) androidx.activity.SystemBarStyle.dark(t) else androidx.activity.SystemBarStyle.light(t, t)
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+    }
+
     private fun clipboardText(): String =
         getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
 
@@ -162,6 +181,8 @@ class MainActivity : ComponentActivity() {
         var tab by rememberSaveable { mutableStateOf(0) }
         var addOpen by remember { mutableStateOf(false) }
         val snack = remember { SnackbarHostState() }
+        val centers = remember { androidx.compose.runtime.mutableStateMapOf<Int, androidx.compose.ui.geometry.Offset>() }
+        var area by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
 
         LaunchedEffect(Unit) { c.messages.collect { snack.showSnackbar(it) } }
         LaunchedEffect(pendingImport) { if (pendingImport != null) addOpen = true }
@@ -169,35 +190,55 @@ class MainActivity : ComponentActivity() {
 
         Box(Modifier.fillMaxSize().background(Palette.bg)) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                Box(Modifier.weight(1f)) {
-                    when (tab) {
-                        0 -> HomeScreen(c, status, onOpenServers = { tab = 1 }, onOpenRoutes = { tab = 2 }, onAddSub = { addOpen = true }, onOpenSettings = { tab = 3 })
-                        1 -> ServersScreen(c, onAddSub = { addOpen = true })
-                        2 -> RoutesScreen(c)
-                        else -> SettingsScreen(c, onAddSub = { addOpen = true }, onSendToTv = ::scanTv)
+                // Новый раздел раскрывается кругом из пункта меню, который нажали.
+                Box(Modifier.weight(1f).onGloballyPositioned { area = it.boundsInRoot() }) {
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = tab,
+                        transitionSpec = {
+                            androidx.compose.animation.ContentTransform(
+                                targetContentEnter = androidx.compose.animation.EnterTransition.None,
+                                initialContentExit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(1, delayMillis = 560)),
+                                targetContentZIndex = 1f,
+                                sizeTransform = null,
+                            )
+                        },
+                        label = "tabs",
+                    ) { t ->
+                        val p by transition.animateFloat(transitionSpec = { androidx.compose.animation.core.tween(560, easing = Settle) }, label = "reveal") {
+                            if (it == androidx.compose.animation.EnterExitState.Visible) 1f else 0f
+                        }
+                        val entering = transition.targetState == androidx.compose.animation.EnterExitState.Visible &&
+                            transition.currentState != androidx.compose.animation.EnterExitState.Visible
+                        val center = (centers[t] ?: androidx.compose.ui.geometry.Offset(area.width / 2, area.height + area.top)) - area.topLeft
+                        Box(
+                            Modifier.fillMaxSize().graphicsLayer {
+                                if (entering && p < 1f) {
+                                    clip = true
+                                    shape = CircleReveal(center, revealRadius(center, size) * p)
+                                }
+                            }.background(Palette.bg)
+                        ) {
+                            when (t) {
+                                0 -> HomeScreen(c, status, onOpenServers = { tab = 1 }, onOpenRoutes = { tab = 2 }, onAddSub = { addOpen = true }, onOpenSettings = { tab = 3 })
+                                1 -> ServersScreen(c, onAddSub = { addOpen = true })
+                                2 -> RoutesScreen(c)
+                                else -> SettingsScreen(c, onAddSub = { addOpen = true }, onSendToTv = ::scanTv)
+                            }
+                        }
                     }
                 }
                 if (tab == 0) {
                     Box(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                         val on = status is CoreState.Status.On || status == CoreState.Status.Connecting
-                        ConnectBar(
-                            on = on,
-                            busy = status == CoreState.Status.Connecting,
-                            label = when (status) {
-                                is CoreState.Status.On -> "Подключено"
-                                CoreState.Status.Connecting -> "Подключаемся…"
-                                else -> "Нажмите или сдвиньте"
-                            },
-                            onToggle = ::toggle,
-                        )
+                        ConnectSwitch(on = on, busy = status == CoreState.Status.Connecting, onToggle = ::toggle)
                     }
                 }
                 HorizontalDivider(color = Palette.line.copy(alpha = 0.6f), thickness = 1.dp)
                 Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 10.dp, vertical = 6.dp)) {
-                    TabItem("Главная", Icons.home, tab == 0, Modifier.weight(1f)) { tab = 0 }
-                    TabItem("Серверы", Icons.servers, tab == 1, Modifier.weight(1f)) { tab = 1 }
-                    TabItem("Маршруты", Icons.fork, tab == 2, Modifier.weight(1f)) { tab = 2 }
-                    TabItem("Настройки", Icons.sliders, tab == 3, Modifier.weight(1f)) { tab = 3 }
+                    NavItem("Главная", tab == 0, Modifier.weight(1f), { centers[0] = it }, { tab = 0 }, navIcon(Icons.home))
+                    NavItem("Серверы", tab == 1, Modifier.weight(1f), { centers[1] = it }, { tab = 1 }, navIcon(Icons.servers))
+                    NavItem("Маршруты", tab == 2, Modifier.weight(1f), { centers[2] = it }, { tab = 2 }, navIcon(Icons.fork))
+                    NavItem("Настройки", tab == 3, Modifier.weight(1f), { centers[3] = it }, { tab = 3 }) { tint, sel -> SettingsGlyph(tint, sel) }
                 }
             }
             SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 150.dp))

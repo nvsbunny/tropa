@@ -82,7 +82,8 @@ import kotlinx.coroutines.launch
  * Обновляются виджеты только когда что-то поменялось (см. [WidgetUpdater]), сами по таймеру не просыпаются.
  */
 
-private fun c(color: Color) = ColorProvider(day = color, night = color)
+/** Виджеты рисует система: днём — светлые цвета Тропы, ночью — тёмные. */
+private fun c(color: Color) = ColorProvider(day = Palette.day(color), night = Palette.night(color))
 
 private val app @Composable get() = LocalContext.current.applicationContext as TropaApp
 

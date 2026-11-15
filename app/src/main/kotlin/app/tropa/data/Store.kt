@@ -101,6 +101,7 @@ class Store(context: Context) {
             put("notification", s.notification)
             put("autoUpdate", s.autoUpdate)
             put("rootMode", s.rootMode)
+            put("theme", s.theme)
             put("providerOrder", s.providerOrder)
         })
         root.put("subs", JSONArray().apply {
@@ -160,6 +161,7 @@ class Store(context: Context) {
                 notification = o.optBoolean("notification", true),
                 autoUpdate = o.optBoolean("autoUpdate", true),
                 rootMode = o.optBoolean("rootMode", false),
+                theme = o.optString("theme", "light"),
                 providerOrder = o.optBoolean("providerOrder", false),
             )
         }

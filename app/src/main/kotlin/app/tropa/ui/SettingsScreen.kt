@@ -143,6 +143,17 @@ fun SettingsScreen(c: Controller, onAddSub: () -> Unit, onSendToTv: () -> Unit =
             }
         }
 
+        SectionLabel("Оформление")
+        Panel {
+            Text("Тема", style = Type.body)
+            Text("Тёмная — зеркальная: графитовый фон и светлая карточка. Виджеты следуют теме телефона.", style = Type.caption, color = Palette.muted)
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("light" to "Светлая", "dark" to "Тёмная", "system" to "Как в телефоне").forEach { (k, l) ->
+                    ChipButton(l, settings.theme == k) { c.setTheme(k) }
+                }
+            }
+        }
+
         SectionLabel("Для опытных")
         Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -183,6 +183,19 @@ class Controller(private val context: Context, val store: Store) {
     // ---------- серверы ----------
 
     /** Само приложение идёт мимо VPN, поэтому его сеть по умолчанию — настоящая. */
+    /** Какую страну уже показали флагом из знаков: повторно флаг для неё не проявляется. */
+    var lastRevealed: String? = null
+
+    /** Подпись сети для главной: «LTE · МегаФон» или «Wi-Fi». */
+    fun networkLabel(): String {
+        if (!onMobileNetwork()) return "Wi-Fi"
+        val operator = runCatching {
+            val sub = android.telephony.SubscriptionManager.getDefaultDataSubscriptionId()
+            context.getSystemService(android.telephony.TelephonyManager::class.java).createForSubscriptionId(sub).networkOperatorName
+        }.getOrNull().orEmpty()
+        return if (operator.isBlank()) "Мобильный" else "LTE · $operator"
+    }
+
     fun onMobileNetwork(): Boolean {
         val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
@@ -436,6 +449,8 @@ class Controller(private val context: Context, val store: Store) {
     fun setAutoUpdate(enabled: Boolean) = store.updateSettings { it.copy(autoUpdate = enabled) }
 
     fun setAdvanced(enabled: Boolean) = store.updateSettings { it.copy(advanced = enabled) }
+
+    fun setTheme(theme: String) = store.updateSettings { it.copy(theme = theme) }
 
     fun setProviderOrder(enabled: Boolean) = store.updateSettings { it.copy(providerOrder = enabled) }
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,30 +63,7 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp)
     ) {
-        Column(Modifier.padding(start = 4.dp, top = 18.dp, bottom = 6.dp)) {
-            Text(
-                when (status) {
-                    is CoreState.Status.On -> "Подключено"
-                    CoreState.Status.Connecting -> "Подключаемся"
-                    is CoreState.Status.Error -> "Не получилось"
-                    CoreState.Status.Off -> "Не подключено"
-                },
-                style = Type.hero,
-                color = if (on) Palette.vpn else Palette.text,
-            )
-            Text(
-                when (status) {
-                    is CoreState.Status.On -> current?.let { n -> countryWord(n.second.name)?.let { "Сайты видят $it, а банки — вас" } }
-                        ?: "Сайты видят адрес сервера, а банки — вас"
-                    CoreState.Status.Connecting -> "Выбираем лучший сервер"
-                    is CoreState.Status.Error -> status.message
-                    CoreState.Status.Off -> "Сайты видят ваш настоящий адрес"
-                },
-                style = Type.small,
-                color = if (status is CoreState.Status.Error) Palette.danger else Palette.muted,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
+        StatusRow(status, c.networkLabel())
 
         if (subs.isEmpty()) {
             Spacer(24.dp)
@@ -98,6 +77,9 @@ fun HomeScreen(
             }
             return@Column
         }
+
+        Spacer(10.dp)
+        ExitCard(c, current, on, status, delays[current?.second?.id], settings.choice, traffic, speed) { picking = true }
 
         (update as? app.tropa.core.Updater.State.Available)?.let { u ->
             Spacer(14.dp)
@@ -116,60 +98,16 @@ fun HomeScreen(
         Spacer(14.dp)
         RouteSummary(settings.mode, settings.directApps.size + settings.customSites.size, onOpenRoutes)
         if (subs.size > 1) MergeRow(settings.mergeSubs) { c.setMerge(it) }
-        Spacer(8.dp)
-        Panel {
-            Row(
-                Modifier.fillMaxWidth().clickable(onClickLabel = "Выбрать страну или сервер") { picking = true },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Flag(current?.let { Names.country(it.second.name) })
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            current?.let { Names.serverName(it.second.name) } ?: "Сервер",
-                            style = Type.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        when (settings.choice) {
-                            ServerChoice.PROVIDER -> Pill("Провайдер")
-                            ServerChoice.AUTO -> Pill("Автовыбор")
-                            ServerChoice.COUNTRY -> Pill("Страна")
-                            ServerChoice.MANUAL -> Unit
-                        }
-                    }
+        if (settings.mergeSubs || subs.size == 1) {
+            Spacer(8.dp)
+            Panel {
+                if (settings.advanced && current != null) {
                     Text(
-                        if (settings.choice == ServerChoice.AUTO && settings.mergeSubs) "Лучший из $totalNodes ${plural(totalNodes, "сервера", "серверов", "серверов")} " +
-                            "в ${subs.size} ${plural(subs.size, "подписке", "подписках", "подписках")}"
-                        else if (settings.choice == ServerChoice.COUNTRY) "Самый быстрый в стране, " + (current?.first?.title?.let(Names::subTitle) ?: "")
-                        else current?.first?.title?.let(Names::subTitle) ?: "",
-                        style = Type.caption, color = Palette.muted, modifier = Modifier.padding(top = 3.dp),
+                        Names.protocol(current.second) + ", " + current.second.server + ":" + current.second.port,
+                        style = Type.caption, color = Palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(bottom = 2.dp),
                     )
                 }
-                Text(delayText(current?.let { delays[it.second.id] }), style = Type.bodyStrong)
-                Ico(Icons.chevron, tint = Palette.muted, size = 18.dp)
-            }
-            if (settings.advanced && current != null) {
-                Text(
-                    Names.protocol(current.second) + ", " + current.second.server + ":" + current.second.port,
-                    style = Type.caption, color = Palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-            }
-            if (on || traffic.month > 0) {
-                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (on) {
-                        Text("↓ ${Controller.formatSpeed(speed.second)}", style = Type.caption, color = Palette.muted)
-                        Text("↑ ${Controller.formatSpeed(speed.first)}", style = Type.caption, color = Palette.muted)
-                    }
-                    if (traffic.month > 0) Text(
-                        "Сегодня ${Controller.formatBytes(traffic.today)} · месяц ${Controller.formatBytes(traffic.month)}",
-                        style = Type.caption, color = Palette.muted, textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-            if (settings.mergeSubs || subs.size == 1) {
                 subs.filter { !it.isLocal }.forEach { PlanRow(it) }
                 subs.firstOrNull { it.announce.isNotBlank() }?.let { s -> Announce("Сообщение от ${Names.subTitle(s.title)}: ${Names.clean(s.announce)}") }
             }
@@ -189,6 +127,119 @@ fun HomeScreen(
             Text("Добавить ещё подписку", style = Type.captionStrong, color = Palette.vpn)
         }
         LSpacer(Modifier.height(24.dp))
+    }
+}
+
+/** Строка сверху: состояние точкой и словом, справа — сеть (LTE и оператор или Wi-Fi). */
+@Composable
+private fun StatusRow(status: CoreState.Status, network: String) {
+    val (word, dot) = when (status) {
+        is CoreState.Status.On -> "ПОДКЛЮЧЕНО" to Palette.vpnOn
+        CoreState.Status.Connecting -> "ПОДКЛЮЧАЕМСЯ" to Palette.brand
+        is CoreState.Status.Error -> "НЕ ПОЛУЧИЛОСЬ" to Palette.danger
+        CoreState.Status.Off -> "НЕ ПОДКЛЮЧЕНО" to Palette.muted
+    }
+    Column(Modifier.padding(start = 6.dp, end = 6.dp, top = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(dot))
+            Text(word, style = Type.tiny.copy(letterSpacing = androidx.compose.ui.unit.TextUnit(1.2f, androidx.compose.ui.unit.TextUnitType.Sp)), modifier = Modifier.padding(start = 8.dp).weight(1f))
+            Text(network, style = Type.tiny, color = Palette.muted)
+        }
+        if (status is CoreState.Status.Error) Text(status.message, style = Type.caption, color = Palette.danger, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+/**
+ * Тёмная карточка выхода: через какую страну сейчас интернет, сервер, отклик, трафик.
+ * Когда страна сменилась (выбрали другую или подключились), название собирается из знаков,
+ * а фоном на несколько секунд проступает флаг из знаков; потом он оседает и карточка снова тихая.
+ */
+@Composable
+private fun ExitCard(
+    c: Controller,
+    current: Pair<Subscription, app.tropa.data.Node>?,
+    on: Boolean,
+    status: CoreState.Status,
+    delay: Int?,
+    choice: ServerChoice,
+    traffic: app.tropa.core.TrafficMeter.Stats,
+    speed: Pair<Long, Long>,
+    onPick: () -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val node = current?.second
+    val code = node?.let { Names.country(it.name) }
+    val lte = node != null && Names.kind(node.name) == Names.Kind.MOBILE
+    // У LTE-обхода флаг в названии — это вход (Россия, Евросоюз), а страна выхода неизвестна.
+    val exitKnown = !lte || (code != null && code != "RU" && Names.countryName(code) != null)
+    val title = when {
+        node == null -> "Сервер"
+        !exitKnown -> "LTE-обход"
+        else -> Names.countryName(code) ?: Names.serverName(node.name)
+    }
+    // Флаг проявляется один раз на каждую новую страну, пока VPN включён.
+    var reveal by remember { mutableStateOf(0) }
+    var flagOn by remember { mutableStateOf(false) }
+    val revealKey = node?.id
+    LaunchedEffect(revealKey, on) {
+        if (on && revealKey != null && revealKey != c.lastRevealed) {
+            c.lastRevealed = revealKey
+            reveal++
+            flagOn = true
+        }
+    }
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Palette.card)
+            .clickable(onClickLabel = "Выбрать страну или сервер", onClick = onPick)
+    ) {
+        // У LTE-обхода страна выхода неизвестна (флаг в названии — это вход): флага не рисуем.
+        if (flagOn && exitKnown) {
+            SymbolFlag(code, Modifier.matchParentSize()) { flagOn = false }
+            Box(Modifier.matchParentSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(0.35f to androidx.compose.ui.graphics.Color.Transparent, 1f to Palette.card.copy(alpha = 0.92f))))
+        }
+        Column(Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (on) "ВЫХОД В ИНТЕРНЕТ" else "БУДЕТ ВЫХОД", style = Type.tiny, color = Palette.cardMuted, modifier = Modifier.weight(1f))
+                val chip = when (choice) {
+                    ServerChoice.PROVIDER -> "ПРОВАЙДЕР"
+                    ServerChoice.AUTO -> "АВТО"
+                    ServerChoice.COUNTRY -> "СТРАНА"
+                    ServerChoice.MANUAL -> "ВРУЧНУЮ"
+                }
+                Text(chip, style = Type.tiny, color = Palette.cardText, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Palette.cardChip).padding(horizontal = 8.dp, vertical = 3.dp))
+            }
+            ScrambleText(title, key = reveal, play = reveal > 0, style = Type.hero.copy(fontSize = androidx.compose.ui.unit.TextUnit(38f, androidx.compose.ui.unit.TextUnitType.Sp), lineHeight = androidx.compose.ui.unit.TextUnit(44f, androidx.compose.ui.unit.TextUnitType.Sp)), color = Palette.cardText, modifier = Modifier.padding(top = 8.dp))
+            if (node != null) {
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (lte) Text("LTE", style = Type.tiny, color = Palette.cardText, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Palette.vpn).padding(horizontal = 6.dp, vertical = 2.dp))
+                    Text(
+                        Names.serverName(node.name) + " · " + Names.subTitle(current.first.title),
+                        style = Type.caption, color = Palette.cardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Text(delayText(delay).ifEmpty { "—" }, style = Type.title, color = Palette.cardText)
+                    if (on) Text(
+                        "↓ ${Controller.formatSpeed(speed.second)}   ↑ ${Controller.formatSpeed(speed.first)}",
+                        style = Type.caption, color = Palette.cardMuted, maxLines = 1, modifier = Modifier.padding(top = 2.dp),
+                    )
+                    Text(
+                        "Сегодня ${Controller.formatBytes(traffic.today)} · месяц ${Controller.formatBytes(traffic.month)}",
+                        style = Type.caption, color = Palette.cardMuted, maxLines = 1,
+                    )
+                }
+                Text(
+                    "Скорость ↗", style = Type.captionStrong, color = Palette.cardText,
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Palette.cardChip)
+                        .clickable(onClickLabel = "Замерить скорость на сайте") {
+                            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.speedtest.net/")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                )
+            }
+        }
     }
 }
 

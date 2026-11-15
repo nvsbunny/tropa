@@ -76,6 +76,8 @@ class TvActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Телевизор — всегда тёмная тема: в полутёмной комнате светлый экран слепит.
+        Palette.dark = true
         setContent { TropaTheme { TvApp() } }
     }
 
