@@ -22,9 +22,9 @@ class SubscriptionFetcher(private val context: Context) {
     class FetchError(message: String) : Exception(message)
 
     private val agents = listOf(
-        "clash.meta/1.19.33",
+        "clash.meta/1.19.34",
         HAPP,
-        "v2rayNG/1.10.20",
+        "v2rayNG/2.3.15",
     )
 
     /**
@@ -178,7 +178,7 @@ class SubscriptionFetcher(private val context: Context) {
 
     companion object {
         /** Так представляется Happ (актуальная версия на ноябрь 2026): часть провайдеров смотрит на неё. */
-        const val HAPP = "Happ/4.9.0"
+        const val HAPP = "Happ/4.10.1"
 
         fun parseUserinfo(v: String?): Map<String, Long> =
             v.orEmpty().split(';').mapNotNull { part ->

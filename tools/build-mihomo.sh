@@ -8,7 +8,7 @@
 # откуда его забирает Gradle. Если этих файлов нет, Тропа собирается только с Xray.
 set -euo pipefail
 
-VERSION="v1.19.33"
+VERSION="v1.19.34"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/.core-cache"
 WORK="${WORK:-$(mktemp -d)}"

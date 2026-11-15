@@ -65,8 +65,9 @@ def xray_check(tag):
         for c in configs:
             shutil.copy(os.path.join(checked, c), os.path.join(work, 'c.json'))
             r = subprocess.run([os.path.join(work, 'xray.exe'), 'run', '-test', '-c', 'c.json'], cwd=work,
-                               capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120,
-                               env={**os.environ, 'XRAY_LOCATION_ASSET': work})
+                               capture_output=True, text=True, encoding='utf-8', errors='replace',
+                               # Первый запуск свежескачанного xray.exe антивирус может держать минуты.
+                               timeout=600, env={**os.environ, 'XRAY_LOCATION_ASSET': work})
             ok = 'Configuration OK' in r.stdout + r.stderr
             print(f'{c}: {"Configuration OK" if ok else (r.stdout + r.stderr).strip()[-300:]}')
             if not ok:
